@@ -1,0 +1,1030 @@
+{% extends "base.html" %}
+
+{% block title %}{{ home_team.name }} vs {{ away_team.name }} - Details{% endblock %}
+
+{% block extra_css %}
+<style>
+    .team-view {
+        background: white;
+        border-radius: 12px;
+        padding: 30px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    .team-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 25px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #f0f4f8;
+    }
+    
+    /* Team Comparison Cards */
+    .team-comparison {
+        display: flex;
+        gap: 32px;
+        margin-bottom: 30px;
+        justify-content: center;
+    }
+    
+    .team-card {
+        border: 1px solid #ddd;
+        border-radius: 12px;
+        background: #fafcfe;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        padding: 25px;
+        min-width: 320px;
+        text-align: center;
+        flex: 1;
+        max-width: 400px;
+    }
+    
+    .team-card h4 {
+        color: #333;
+        margin-bottom: 20px;
+        font-size: 1.4rem;
+        font-weight: bold;
+        border-bottom: 2px solid #667eea;
+        padding-bottom: 10px;
+    }
+    
+    .team-stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        font-size: 1rem;
+        margin-bottom: 25px;
+    }
+    
+    .stat-item {
+        padding: 12px;
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #e9ecef;
+        transition: transform 0.2s ease;
+    }
+    
+    .stat-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .stat-label {
+        font-weight: bold;
+        color: #667eea;
+        font-size: 0.9rem;
+        margin-bottom: 4px;
+    }
+    
+    .stat-value {
+        font-size: 1.3rem;
+        color: #333;
+        font-weight: bold;
+    }
+    
+    /* Stats Controls */
+    .stats-controls {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 25px;
+        justify-content: center;
+    }
+    
+    .tab-btn {
+        padding: 12px 24px;
+        border: 2px solid #667eea;
+        background: white;
+        color: #667eea;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-weight: 600;
+        font-size: 1rem;
+    }
+    
+    .tab-btn.active-tab {
+        background: #667eea;
+        color: white;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    }
+    
+    /* Roster Tables */
+    .roster-section {
+        margin-bottom: 40px;
+    }
+    
+    .section-title {
+        font-size: 1.6rem;
+        color: #333;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 3px solid #667eea;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .roster-columns {
+        display: flex;
+        gap: 40px;
+        align-items: flex-start;
+    }
+    
+    .team-column {
+        flex: 1;
+        min-width: 400px;
+    }
+    
+    .team-column h4 {
+        color: white;
+        margin-bottom: 15px;
+        font-size: 1.3rem;
+        text-align: center;
+        padding: 15px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 8px;
+        font-weight: bold;
+    }
+    
+    .stats-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #f8f9fa;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        margin-bottom: 25px;
+    }
+    
+    .stats-table th {
+        background: #667eea;
+        color: white;
+        padding: 12px 8px;
+        text-align: center;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+    
+    .stats-table td {
+        padding: 10px 8px;
+        border-bottom: 1px solid #dee2e6;
+        font-size: 0.9rem;
+        text-align: center;
+    }
+    
+    .stats-table tr:hover {
+        background: #e9ecef;
+    }
+    
+    .player-name {
+        font-weight: 600;
+        color: #333;
+        text-align: left !important;
+    }
+    
+    .position {
+        background: #e9ecef;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        color: #666;
+    }
+    
+    .favorite-control {
+        text-align: center;
+    }
+    
+    .favorite-checkbox {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-size: 1rem;
+        background: #f8f9fa;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #e9ecef;
+    }
+    
+    .favorite-checkbox input[type="checkbox"] {
+        transform: scale(1.2);
+    }
+    
+    .stat-good {
+        background-color: #d4edda !important;
+        color: #155724;
+    }
+    
+    .stat-bad {
+        background-color: #f8d7da !important;
+        color: #721c24;
+    }
+    
+    @media (max-width: 768px) {
+        .team-comparison {
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .roster-columns {
+            flex-direction: column;
+            gap: 30px;
+        }
+        
+        .team-column {
+            min-width: auto;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="team-view">
+    <div class="team-header">
+        <h2>{{ away_team.name }} @ {{ home_team.name }}</h2>
+        <a href="{{ url_for('home') }}" class="back-btn">← Back to Games</a>
+    </div>
+    
+    <!-- Stats Period Controls -->
+    <div class="stats-controls">
+        <button class="tab-btn active-tab" id="tab-7" onclick="setStatWindow('7')">7 Days</button>
+        <button class="tab-btn" id="tab-10" onclick="setStatWindow('10')">10 Days</button>
+        <button class="tab-btn" id="tab-21" onclick="setStatWindow('21')">21 Days</button>
+    </div>
+    
+    <!-- Team Comparison Section -->
+    <div class="roster-section">
+        <h3 class="section-title">⚡ Team Comparison (2025 Season Stats)</h3>
+        
+        <!-- 7 Days Team Comparison -->
+        <div class="team-comparison stat-window stat-7">
+            <div class="team-card">
+                <h4>{{ away_team.name }}</h4>
+                <div class="team-stats">
+                    <div class="stat-item">
+                        <div class="stat-label">Team AVG</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('7', {}).get('AVG', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Team OBP</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('7', {}).get('OBP', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Team SLG</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('7', {}).get('SLG', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Home Runs</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('7', {}).get('HR', '0') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Avg Hits</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('7', {}).get('AVG_HITS', '0.0') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Avg K</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('7', {}).get('AVG_K', '0.0') }}</div>
+                    </div>
+                </div>
+                <div class="favorite-control">
+                    <form method="post" action="{{ url_for('toggle_favorite') }}">
+                        <label class="favorite-checkbox">
+                            <input type="checkbox" name="favorite" value="{{ away_team.name }}"
+                                {% if away_team.name in favorites %}checked{% endif %}
+                                onchange="this.form.submit()">
+                            ⭐ Favorite this team
+                        </label>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="team-card">
+                <h4>{{ home_team.name }}</h4>
+                <div class="team-stats">
+                    <div class="stat-item">
+                        <div class="stat-label">Team AVG</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('7', {}).get('AVG', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Team OBP</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('7', {}).get('OBP', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Team SLG</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('7', {}).get('SLG', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Home Runs</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('7', {}).get('HR', '0') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Avg Hits</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('7', {}).get('AVG_HITS', '0.0') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Avg K</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('7', {}).get('AVG_K', '0.0') }}</div>
+                    </div>
+                </div>
+                <div class="favorite-control">
+                    <form method="post" action="{{ url_for('toggle_favorite') }}">
+                        <label class="favorite-checkbox">
+                            <input type="checkbox" name="favorite" value="{{ home_team.name }}"
+                                {% if home_team.name in favorites %}checked{% endif %}
+                                onchange="this.form.submit()">
+                            ⭐ Favorite this team
+                        </label>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 10 Days Team Comparison -->
+        <div class="team-comparison stat-window stat-10" style="display:none">
+            <div class="team-card">
+                <h4>{{ away_team.name }}</h4>
+                <div class="team-stats">
+                    <div class="stat-item">
+                        <div class="stat-label">Team AVG</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('10', {}).get('AVG', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Team OBP</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('10', {}).get('OBP', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Team SLG</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('10', {}).get('SLG', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Home Runs</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('10', {}).get('HR', '0') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Avg Hits</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('10', {}).get('AVG_HITS', '0.0') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Avg K</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('10', {}).get('AVG_K', '0.0') }}</div>
+                    </div>
+                </div>
+                <div class="favorite-control">
+                    <form method="post" action="{{ url_for('toggle_favorite') }}">
+                        <label class="favorite-checkbox">
+                            <input type="checkbox" name="favorite" value="{{ away_team.name }}"
+                                {% if away_team.name in favorites %}checked{% endif %}
+                                onchange="this.form.submit()">
+                            ⭐ Favorite this team
+                        </label>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="team-card">
+                <h4>{{ home_team.name }}</h4>
+                <div class="team-stats">
+                    <div class="stat-item">
+                        <div class="stat-label">Team AVG</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('10', {}).get('AVG', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Team OBP</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('10', {}).get('OBP', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Team SLG</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('10', {}).get('SLG', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Home Runs</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('10', {}).get('HR', '0') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Avg Hits</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('10', {}).get('AVG_HITS', '0.0') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Avg K</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('10', {}).get('AVG_K', '0.0') }}</div>
+                    </div>
+                </div>
+                <div class="favorite-control">
+                    <form method="post" action="{{ url_for('toggle_favorite') }}">
+                        <label class="favorite-checkbox">
+                            <input type="checkbox" name="favorite" value="{{ home_team.name }}"
+                                {% if home_team.name in favorites %}checked{% endif %}
+                                onchange="this.form.submit()">
+                            ⭐ Favorite this team
+                        </label>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 21 Days Team Comparison -->
+        <div class="team-comparison stat-window stat-21" style="display:none">
+            <div class="team-card">
+                <h4>{{ away_team.name }}</h4>
+                <div class="team-stats">
+                    <div class="stat-item">
+                        <div class="stat-label">Team AVG</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('21', {}).get('AVG', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Team OBP</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('21', {}).get('OBP', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Team SLG</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('21', {}).get('SLG', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Home Runs</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('21', {}).get('HR', '0') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Avg Hits</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('21', {}).get('AVG_HITS', '0.0') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Avg K</div>
+                        <div class="stat-value">{{ away_team.rollingTeamStats.get('21', {}).get('AVG_K', '0.0') }}</div>
+                    </div>
+                </div>
+                <div class="favorite-control">
+                    <form method="post" action="{{ url_for('toggle_favorite') }}">
+                        <label class="favorite-checkbox">
+                            <input type="checkbox" name="favorite" value="{{ away_team.name }}"
+                                {% if away_team.name in favorites %}checked{% endif %}
+                                onchange="this.form.submit()">
+                            ⭐ Favorite this team
+                        </label>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="team-card">
+                <h4>{{ home_team.name }}</h4>
+                <div class="team-stats">
+                    <div class="stat-item">
+                        <div class="stat-label">Team AVG</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('21', {}).get('AVG', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Team OBP</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('21', {}).get('OBP', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Team SLG</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('21', {}).get('SLG', '.000') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Home Runs</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('21', {}).get('HR', '0') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Avg Hits</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('21', {}).get('AVG_HITS', '0.0') }}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Avg K</div>
+                        <div class="stat-value">{{ home_team.rollingTeamStats.get('21', {}).get('AVG_K', '0.0') }}</div>
+                    </div>
+                </div>
+                <div class="favorite-control">
+                    <form method="post" action="{{ url_for('toggle_favorite') }}">
+                        <label class="favorite-checkbox">
+                            <input type="checkbox" name="favorite" value="{{ home_team.name }}"
+                                {% if home_team.name in favorites %}checked{% endif %}
+                                onchange="this.form.submit()">
+                            ⭐ Favorite this team
+                        </label>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Complete Rosters -->
+    <div class="roster-section">
+        <h3 class="section-title">👥 Team Rosters (2025 Season Stats)</h3>
+        <div class="roster-columns">
+            <div class="team-column">
+                <h4>{{ away_team.name }} Batters</h4>
+                
+                <!-- Away Team Batters - 7 Days -->
+                <table class="stats-table stat-window stat-7">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>Pos</th>
+                            <th>AVG</th>
+                            <th>SLG</th>
+                            <th>OBP</th>
+                            <th>HR</th>
+                            <th>RBI</th>
+                            <th>H</th>
+                            <th>AB</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if away_team.fullRoster.batters %}
+                            {% for batter in away_team.fullRoster.batters[:15] %}
+                            <tr>
+                                <td class="player-name">{{ batter.name }}</td>
+                                <td><span class="position">{{ batter.position }}</span></td>
+                                {% set avg_val = batter.get('stats', {}).get('7', {}).get('avg', '.000')|float %}
+                                <td {% if avg_val > 0.265 %}class="stat-good"{% elif avg_val < 0.240 and avg_val > 0 %}class="stat-bad"{% endif %}>{{ "%.3f"|format(avg_val) }}</td>
+                                {% set slg_val = batter.get('stats', {}).get('7', {}).get('slg', '.000')|float %}
+                                <td {% if slg_val > 0.450 %}class="stat-good"{% endif %}>{{ "%.3f"|format(slg_val) }}</td>
+                                {% set obp_val = batter.get('stats', {}).get('7', {}).get('obp', '.000')|float %}
+                                <td {% if obp_val > 0.400 %}class="stat-good"{% endif %}>{{ "%.3f"|format(obp_val) }}</td>
+                                <td>{{ batter.get('stats', {}).get('7', {}).get('hr', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('7', {}).get('rbi', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('7', {}).get('h', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('7', {}).get('ab', '0') }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="9" class="loading-message">Loading player data...</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                
+                <!-- Away Team Batters - 10 Days -->
+                <table class="stats-table stat-window stat-10" style="display:none">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>Pos</th>
+                            <th>AVG</th>
+                            <th>SLG</th>
+                            <th>OBP</th>
+                            <th>HR</th>
+                            <th>RBI</th>
+                            <th>H</th>
+                            <th>AB</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if away_team.fullRoster.batters %}
+                            {% for batter in away_team.fullRoster.batters[:15] %}
+                            <tr>
+                                <td class="player-name">{{ batter.name }}</td>
+                                <td><span class="position">{{ batter.position }}</span></td>
+                                {% set avg_val = batter.get('stats', {}).get('10', {}).get('avg', '.000')|float %}
+                                <td {% if avg_val > 0.265 %}class="stat-good"{% elif avg_val < 0.240 and avg_val > 0 %}class="stat-bad"{% endif %}>{{ "%.3f"|format(avg_val) }}</td>
+                                {% set slg_val = batter.get('stats', {}).get('10', {}).get('slg', '.000')|float %}
+                                <td {% if slg_val > 0.450 %}class="stat-good"{% endif %}>{{ "%.3f"|format(slg_val) }}</td>
+                                {% set obp_val = batter.get('stats', {}).get('10', {}).get('obp', '.000')|float %}
+                                <td {% if obp_val > 0.400 %}class="stat-good"{% endif %}>{{ "%.3f"|format(obp_val) }}</td>
+                                <td>{{ batter.get('stats', {}).get('10', {}).get('hr', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('10', {}).get('rbi', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('10', {}).get('h', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('10', {}).get('ab', '0') }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="9" class="loading-message">Loading player data...</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                
+                <!-- Away Team Batters - 21 Days -->
+                <table class="stats-table stat-window stat-21" style="display:none">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>Pos</th>
+                            <th>AVG</th>
+                            <th>SLG</th>
+                            <th>OBP</th>
+                            <th>HR</th>
+                            <th>RBI</th>
+                            <th>H</th>
+                            <th>AB</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if away_team.fullRoster.batters %}
+                            {% for batter in away_team.fullRoster.batters[:15] %}
+                            <tr>
+                                <td class="player-name">{{ batter.name }}</td>
+                                <td><span class="position">{{ batter.position }}</span></td>
+                                {% set avg_val = batter.get('stats', {}).get('21', {}).get('avg', '.000')|float %}
+                                <td {% if avg_val > 0.265 %}class="stat-good"{% elif avg_val < 0.240 and avg_val > 0 %}class="stat-bad"{% endif %}>{{ "%.3f"|format(avg_val) }}</td>
+                                {% set slg_val = batter.get('stats', {}).get('21', {}).get('slg', '.000')|float %}
+                                <td {% if slg_val > 0.450 %}class="stat-good"{% endif %}>{{ "%.3f"|format(slg_val) }}</td>
+                                {% set obp_val = batter.get('stats', {}).get('21', {}).get('obp', '.000')|float %}
+                                <td {% if obp_val > 0.400 %}class="stat-good"{% endif %}>{{ "%.3f"|format(obp_val) }}</td>
+                                <td>{{ batter.get('stats', {}).get('21', {}).get('hr', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('21', {}).get('rbi', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('21', {}).get('h', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('21', {}).get('ab', '0') }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="9" class="loading-message">Loading player data...</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                
+                <!-- Away Team Pitchers Section -->
+                <h4 style="margin-top: 25px;">{{ away_team.name }} Pitchers</h4>
+                
+                <!-- Away Team Pitchers - 7 Days -->
+                <table class="stats-table stat-window stat-7">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>ERA</th>
+                            <th>WHIP</th>
+                            <th>K</th>
+                            <th>BB</th>
+                            <th>IP</th>
+                            <th>GS</th>
+                            <th>SV</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if away_team.fullRoster.pitchers %}
+                            {% for pitcher in away_team.fullRoster.pitchers[:15] %}
+                            <tr>
+                                <td class="player-name">{{ pitcher.name }}</td>
+                                {% set era_val = pitcher.get('stats', {}).get('7', {}).get('era', '0.00')|float %}
+                                <td {% if era_val < 3.00 and era_val > 0 %}class="stat-good"{% elif era_val > 5.00 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('7', {}).get('era', '0.00') }}</td>
+                                {% set whip_val = pitcher.get('stats', {}).get('7', {}).get('whip', '0.00')|float %}
+                                <td {% if whip_val < 1.20 and whip_val > 0 %}class="stat-good"{% elif whip_val > 1.50 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('7', {}).get('whip', '0.00') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('7', {}).get('k', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('7', {}).get('bb', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('7', {}).get('ip', '0.0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('7', {}).get('gs', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('7', {}).get('sv', '0') }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="8" class="loading-message">Loading player data...</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                
+                <!-- Away Team Pitchers - 10 Days -->
+                <table class="stats-table stat-window stat-10" style="display:none">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>ERA</th>
+                            <th>WHIP</th>
+                            <th>K</th>
+                            <th>BB</th>
+                            <th>IP</th>
+                            <th>GS</th>
+                            <th>SV</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if away_team.fullRoster.pitchers %}
+                            {% for pitcher in away_team.fullRoster.pitchers[:15] %}
+                            <tr>
+                                <td class="player-name">{{ pitcher.name }}</td>
+                                {% set era_val = pitcher.get('stats', {}).get('10', {}).get('era', '0.00')|float %}
+                                <td {% if era_val < 3.00 and era_val > 0 %}class="stat-good"{% elif era_val > 5.00 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('10', {}).get('era', '0.00') }}</td>
+                                {% set whip_val = pitcher.get('stats', {}).get('10', {}).get('whip', '0.00')|float %}
+                                <td {% if whip_val < 1.20 and whip_val > 0 %}class="stat-good"{% elif whip_val > 1.50 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('10', {}).get('whip', '0.00') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('k', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('bb', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('ip', '0.0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('gs', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('sv', '0') }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="8" class="loading-message">Loading player data...</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                
+                <!-- Away Team Pitchers - 21 Days -->
+                <table class="stats-table stat-window stat-21" style="display:none">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>ERA</th>
+                            <th>WHIP</th>
+                            <th>K</th>
+                            <th>BB</th>
+                            <th>IP</th>
+                            <th>GS</th>
+                            <th>SV</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if away_team.fullRoster.pitchers %}
+                            {% for pitcher in away_team.fullRoster.pitchers[:15] %}
+                            <tr>
+                                <td class="player-name">{{ pitcher.name }}</td>
+                                {% set era_val = pitcher.get('stats', {}).get('21', {}).get('era', '0.00')|float %}
+                                <td {% if era_val < 3.00 and era_val > 0 %}class="stat-good"{% elif era_val > 5.00 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('21', {}).get('era', '0.00') }}</td>
+                                {% set whip_val = pitcher.get('stats', {}).get('21', {}).get('whip', '0.00')|float %}
+                                <td {% if whip_val < 1.20 and whip_val > 0 %}class="stat-good"{% elif whip_val > 1.50 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('21', {}).get('whip', '0.00') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('k', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('bb', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('ip', '0.0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('gs', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('sv', '0') }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="8" class="loading-message">Loading player data...</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- HOME TEAM COLUMN -->
+            <div class="team-column">
+                <h4>{{ home_team.name }} Batters</h4>
+                
+                <!-- Home Team Batters - 7 Days -->
+                <table class="stats-table stat-window stat-7">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>Pos</th>
+                            <th>AVG</th>
+                            <th>SLG</th>
+                            <th>OBP</th>
+                            <th>HR</th>
+                            <th>RBI</th>
+                            <th>H</th>
+                            <th>AB</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if home_team.fullRoster.batters %}
+                            {% for batter in home_team.fullRoster.batters[:15] %}
+                            <tr>
+                                <td class="player-name">{{ batter.name }}</td>
+                                <td><span class="position">{{ batter.position }}</span></td>
+                                {% set avg_val = batter.get('stats', {}).get('7', {}).get('avg', '.000')|float %}
+                                <td {% if avg_val > 0.265 %}class="stat-good"{% elif avg_val < 0.240 and avg_val > 0 %}class="stat-bad"{% endif %}>{{ "%.3f"|format(avg_val) }}</td>
+                                {% set slg_val = batter.get('stats', {}).get('7', {}).get('slg', '.000')|float %}
+                                <td {% if slg_val > 0.450 %}class="stat-good"{% endif %}>{{ "%.3f"|format(slg_val) }}</td>
+                                {% set obp_val = batter.get('stats', {}).get('7', {}).get('obp', '.000')|float %}
+                                <td {% if obp_val > 0.400 %}class="stat-good"{% endif %}>{{ "%.3f"|format(obp_val) }}</td>
+                                <td>{{ batter.get('stats', {}).get('7', {}).get('hr', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('7', {}).get('rbi', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('7', {}).get('h', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('7', {}).get('ab', '0') }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="9" class="loading-message">Loading player data...</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                
+                <!-- Home Team Batters - 10 Days -->
+                <table class="stats-table stat-window stat-10" style="display:none">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>Pos</th>
+                            <th>AVG</th>
+                            <th>SLG</th>
+                            <th>OBP</th>
+                            <th>HR</th>
+                            <th>RBI</th>
+                            <th>H</th>
+                            <th>AB</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if home_team.fullRoster.batters %}
+                            {% for batter in home_team.fullRoster.batters[:15] %}
+                            <tr>
+                                <td class="player-name">{{ batter.name }}</td>
+                                <td><span class="position">{{ batter.position }}</span></td>
+                                {% set avg_val = batter.get('stats', {}).get('10', {}).get('avg', '.000')|float %}
+                                <td {% if avg_val > 0.265 %}class="stat-good"{% elif avg_val < 0.240 and avg_val > 0 %}class="stat-bad"{% endif %}>{{ "%.3f"|format(avg_val) }}</td>
+                                {% set slg_val = batter.get('stats', {}).get('10', {}).get('slg', '.000')|float %}
+                                <td {% if slg_val > 0.450 %}class="stat-good"{% endif %}>{{ "%.3f"|format(slg_val) }}</td>
+                                {% set obp_val = batter.get('stats', {}).get('10', {}).get('obp', '.000')|float %}
+                                <td {% if obp_val > 0.400 %}class="stat-good"{% endif %}>{{ "%.3f"|format(obp_val) }}</td>
+                                <td>{{ batter.get('stats', {}).get('10', {}).get('hr', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('10', {}).get('rbi', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('10', {}).get('h', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('10', {}).get('ab', '0') }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="9" class="loading-message">Loading player data...</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                
+                <!-- Home Team Batters - 21 Days -->
+                <table class="stats-table stat-window stat-21" style="display:none">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>Pos</th>
+                            <th>AVG</th>
+                            <th>SLG</th>
+                            <th>OBP</th>
+                            <th>HR</th>
+                            <th>RBI</th>
+                            <th>H</th>
+                            <th>AB</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if home_team.fullRoster.batters %}
+                            {% for batter in home_team.fullRoster.batters[:15] %}
+                            <tr>
+                                <td class="player-name">{{ batter.name }}</td>
+                                <td><span class="position">{{ batter.position }}</span></td>
+                                {% set avg_val = batter.get('stats', {}).get('21', {}).get('avg', '.000')|float %}
+                                <td {% if avg_val > 0.265 %}class="stat-good"{% elif avg_val < 0.240 and avg_val > 0 %}class="stat-bad"{% endif %}>{{ "%.3f"|format(avg_val) }}</td>
+                                {% set slg_val = batter.get('stats', {}).get('21', {}).get('slg', '.000')|float %}
+                                <td {% if slg_val > 0.450 %}class="stat-good"{% endif %}>{{ "%.3f"|format(slg_val) }}</td>
+                                {% set obp_val = batter.get('stats', {}).get('21', {}).get('obp', '.000')|float %}
+                                <td {% if obp_val > 0.400 %}class="stat-good"{% endif %}>{{ "%.3f"|format(obp_val) }}</td>
+                                <td>{{ batter.get('stats', {}).get('21', {}).get('hr', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('21', {}).get('rbi', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('21', {}).get('h', '0') }}</td>
+                                <td>{{ batter.get('stats', {}).get('21', {}).get('ab', '0') }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="9" class="loading-message">Loading player data...</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                
+                <!-- Home Team Pitchers Section -->
+                <h4 style="margin-top: 25px;">{{ home_team.name }} Pitchers</h4>
+                
+                <!-- Home Team Pitchers - 7 Days -->
+                <table class="stats-table stat-window stat-7">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>ERA</th>
+                            <th>WHIP</th>
+                            <th>K</th>
+                            <th>BB</th>
+                            <th>IP</th>
+                            <th>GS</th>
+                            <th>SV</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if home_team.fullRoster.pitchers %}
+                            {% for pitcher in home_team.fullRoster.pitchers[:15] %}
+                            <tr>
+                                <td class="player-name">{{ pitcher.name }}</td>
+                                {% set era_val = pitcher.get('stats', {}).get('7', {}).get('era', '0.00')|float %}
+                                <td {% if era_val < 3.00 and era_val > 0 %}class="stat-good"{% elif era_val > 5.00 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('7', {}).get('era', '0.00') }}</td>
+                                {% set whip_val = pitcher.get('stats', {}).get('7', {}).get('whip', '0.00')|float %}
+                                <td {% if whip_val < 1.20 and whip_val > 0 %}class="stat-good"{% elif whip_val > 1.50 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('7', {}).get('whip', '0.00') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('7', {}).get('k', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('7', {}).get('bb', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('7', {}).get('ip', '0.0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('7', {}).get('gs', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('7', {}).get('sv', '0') }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="8" class="loading-message">Loading player data...</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                
+                <!-- Home Team Pitchers - 10 Days -->
+                <table class="stats-table stat-window stat-10" style="display:none">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>ERA</th>
+                            <th>WHIP</th>
+                            <th>K</th>
+                            <th>BB</th>
+                            <th>IP</th>
+                            <th>GS</th>
+                            <th>SV</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if home_team.fullRoster.pitchers %}
+                            {% for pitcher in home_team.fullRoster.pitchers[:15] %}
+                            <tr>
+                                <td class="player-name">{{ pitcher.name }}</td>
+                                {% set era_val = pitcher.get('stats', {}).get('10', {}).get('era', '0.00')|float %}
+                                <td {% if era_val < 3.00 and era_val > 0 %}class="stat-good"{% elif era_val > 5.00 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('10', {}).get('era', '0.00') }}</td>
+                                {% set whip_val = pitcher.get('stats', {}).get('10', {}).get('whip', '0.00')|float %}
+                                <td {% if whip_val < 1.20 and whip_val > 0 %}class="stat-good"{% elif whip_val > 1.50 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('10', {}).get('whip', '0.00') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('k', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('bb', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('ip', '0.0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('gs', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('sv', '0') }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="8" class="loading-message">Loading player data...</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                
+                <!-- Home Team Pitchers - 21 Days -->
+                <table class="stats-table stat-window stat-21" style="display:none">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>ERA</th>
+                            <th>WHIP</th>
+                            <th>K</th>
+                            <th>BB</th>
+                            <th>IP</th>
+                            <th>GS</th>
+                            <th>SV</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if home_team.fullRoster.pitchers %}
+                            {% for pitcher in home_team.fullRoster.pitchers[:15] %}
+                            <tr>
+                                <td class="player-name">{{ pitcher.name }}</td>
+                                {% set era_val = pitcher.get('stats', {}).get('21', {}).get('era', '0.00')|float %}
+                                <td {% if era_val < 3.00 and era_val > 0 %}class="stat-good"{% elif era_val > 5.00 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('21', {}).get('era', '0.00') }}</td>
+                                {% set whip_val = pitcher.get('stats', {}).get('21', {}).get('whip', '0.00')|float %}
+                                <td {% if whip_val < 1.20 and whip_val > 0 %}class="stat-good"{% elif whip_val > 1.50 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('21', {}).get('whip', '0.00') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('k', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('bb', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('ip', '0.0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('gs', '0') }}</td>
+                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('sv', '0') }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="8" class="loading-message">Loading player data...</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function setStatWindow(d) {
+    // Hide all windows, deactivate all tabs
+    ['7','10','21'].forEach(function(day){
+        document.querySelectorAll('.stat-'+day).forEach(function(el){
+            el.style.display = 'none';
+        });
+        document.getElementById('tab-'+day).classList.remove('active-tab');
+    });
+    // Show selected, activate tab
+    document.querySelectorAll('.stat-'+d).forEach(function(el){
+        el.style.display = '';
+    });
+    document.getElementById('tab-'+d).classList.add('active-tab');
+}
+
+// Show loading message on page load
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('MLB Stats Tracker loaded');
+});
+</script>
+{% endblock %}

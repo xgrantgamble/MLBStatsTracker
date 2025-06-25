@@ -1,0 +1,51 @@
+<!-- templates/home.html -->
+{% extends "base.html" %}
+
+{% block title %}MLB Games - Today{% endblock %}
+
+{% block content %}
+<!-- Favorites Section -->
+<div class="favorites">
+    <h3>⭐ Favorite Lineups</h3>
+    <div class="favorites-list">
+        {% if favorites %}
+            {% for team in favorites %}
+                <span class="favorite-tag">{{ team }}</span>
+            {% endfor %}
+        {% else %}
+            <span style="color: #666; font-style: italic;">No favorites yet</span>
+        {% endif %}
+    </div>
+    <form action="{{ url_for('reset_favorites') }}" method="post" style="display:inline;">
+        <button type="submit" class="reset-btn">Reset Favorites</button>
+    </form>
+</div>
+
+<!-- Today's Games -->
+<div class="games-container">
+    {% for game in games %}
+        <div class="game-card">
+            <div class="game-header">
+                <div class="teams">
+                    {{ game.away_team }} <span class="vs">@</span> {{ game.home_team }}
+                </div>
+                {% if game.status == 'postponed' %}
+                    <span class="postponed">{{ game.formatted_time }}</span>
+                {% else %}
+                    <div class="game-time">{{ game.formatted_time }}</div>
+                {% endif %}
+            </div>
+            {% if game.status == 'postponed' %}
+                <span class="view-details-btn disabled">View Details</span>
+            {% else %}
+                <a href="{{ url_for('view_details', home_id=game.home_id, away_id=game.away_id) }}" 
+                   class="view-details-btn">View Details</a>
+            {% endif %}
+        </div>
+    {% else %}
+        <div class="game-card">
+            <p>No games scheduled for today.</p>
+        </div>
+    {% endfor %}
+</div>
+{% endblock %}
