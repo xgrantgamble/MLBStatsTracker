@@ -399,7 +399,7 @@
             padding: 4px 3px !important;
         }
     }
-    
+
 </style>
 {% endblock %}
 
@@ -1170,19 +1170,57 @@
 
 {% block extra_js %}
 <script>
-function setStatWindow(d) {
+let loadedPeriods = ['7']; // Track which periods are loaded
+const currentMatchup = {
+    homeId: {{ home_team.name.split()[-1] or 0 }},  // You'll need to pass team IDs
+    awayId: {{ away_team.name.split()[-1] or 0 }}
+};
+
+async function setStatWindow(days) {
+    // Show loading indicator
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.disabled = true;
+        if (btn.id === `tab-${days}`) {
+            btn.innerHTML = 'Loading...';
+        }
+    });
+    
+    // If stats not loaded for this period, load them
+    if (!loadedPeriods.includes(days)) {
+        try {
+            const response = await fetch(`/api/load-stats/${currentMatchup.homeId}/${currentMatchup.awayId}/${days}`);
+            const data = await response.json();
+            
+            // Update tables with new data
+            updateTablesWithStats(data, days);
+            loadedPeriods.push(days);
+            
+        } catch (error) {
+            console.error('Failed to load stats:', error);
+        }
+    }
+    
     // Hide all windows, deactivate all tabs
     ['7','10','21'].forEach(function(day){
         document.querySelectorAll('.stat-'+day).forEach(function(el){
             el.style.display = 'none';
         });
         document.getElementById('tab-'+day).classList.remove('active-tab');
+        document.getElementById('tab-'+day).disabled = false;
+        document.getElementById('tab-'+day).innerHTML = day + ' Days';
     });
+    
     // Show selected, activate tab
-    document.querySelectorAll('.stat-'+d).forEach(function(el){
+    document.querySelectorAll('.stat-'+days).forEach(function(el){
         el.style.display = '';
     });
-    document.getElementById('tab-'+d).classList.add('active-tab');
+    document.getElementById('tab-'+days).classList.add('active-tab');
+}
+
+function updateTablesWithStats(data, days) {
+    // Update table cells with new stats
+    // Implementation depends on your table structure
+    // You'd loop through data and update corresponding table cells
 }
 
 // Show loading message on page load

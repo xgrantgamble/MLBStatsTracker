@@ -497,6 +497,89 @@ def reset_favorites():
     session['favorites'] = []
     return redirect(url_for('home'))
 
+@app.route('/api/load-stats/<int:home_id>/<int:away_id>/<int:days>')
+def load_stats_for_period(home_id, away_id, days):
+    """Load stats for specific time period on-demand"""
+    try:
+        # Get team rosters
+        home_roster = MLBStatsAPI.get_team_roster(home_id)
+        away_roster = MLBStatsAPI.get_team_roster(away_id)
+        
+        result = {
+            'home_batters': [],
+            'away_batters': [],
+            'home_pitchers': [],
+            'away_pitchers': []
+        }
+        
+        # Load stats for requested period
+        for i, batter in enumerate(away_roster['batters'][:15]):
+            try:
+                stats = MLBStatsAPI.get_player_stats(batter['id'], 'hitting', days)
+                result['away_batters'].append({
+                    'id': batter['id'],
+                    'name': batter['name'],
+                    'stats': stats
+                })
+            except:
+                result['away_batters'].append({
+                    'id': batter['id'],
+                    'name': batter['name'],
+                    'stats': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
+                })
+        
+        for i, batter in enumerate(home_roster['batters'][:15]):
+            try:
+                stats = MLBStatsAPI.get_player_stats(batter['id'], 'hitting', days)
+                result['home_batters'].append({
+                    'id': batter['id'],
+                    'name': batter['name'],
+                    'stats': stats
+                })
+            except:
+                result['home_batters'].append({
+                    'id': batter['id'],
+                    'name': batter['name'],
+                    'stats': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
+                })
+        
+        # Similar for pitchers...
+        for i, pitcher in enumerate(away_roster['pitchers'][:15]):
+            try:
+                stats = MLBStatsAPI.get_player_stats(pitcher['id'], 'pitching', days)
+                result['away_pitchers'].append({
+                    'id': pitcher['id'],
+                    'name': pitcher['name'],
+                    'stats': stats
+                })
+            except:
+                result['away_pitchers'].append({
+                    'id': pitcher['id'],
+                    'name': pitcher['name'],
+                    'stats': {'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0', 'gs': 0, 'sv': 0}
+                })
+        
+        for i, pitcher in enumerate(home_roster['pitchers'][:15]):
+            try:
+                stats = MLBStatsAPI.get_player_stats(pitcher['id'], 'pitching', days)
+                result['home_pitchers'].append({
+                    'id': pitcher['id'],
+                    'name': pitcher['name'],
+                    'stats': stats
+                })
+            except:
+                result['home_pitchers'].append({
+                    'id': pitcher['id'],
+                    'name': pitcher['name'],
+                    'stats': {'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0', 'gs': 0, 'sv': 0}
+                })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error loading {days}-day stats: {e}")
+        return jsonify({'error': 'Failed to load stats'}), 500
+
 # Helper Functions (unchanged)
 def get_team_name(team_id):
     """Get team name by ID"""
@@ -606,7 +689,7 @@ def calculate_rolling_team_stats(batters, pitchers, period):
 
 # Change your build_team_data function to load stats lazily
 def build_team_data(team_name, roster, team_stats):
-    """Build comprehensive team data with smart player selection"""
+    """Build team data with only 7-day stats initially"""
     logger.info(f"Building team data for {team_name}")
     
     team_data = {
@@ -619,8 +702,8 @@ def build_team_data(team_name, roster, team_stats):
         'starter': {},
         'teamStats': {
             '7': team_stats,
-            '10': team_stats,
-            '21': team_stats
+            '10': team_stats,  # Will be loaded on-demand
+            '21': team_stats   # Will be loaded on-demand
         },
         'rollingTeamStats': {
             '7': {'AVG': '.250', 'OBP': '.320', 'SLG': '.400', 'HR': '10', 'AVG_HITS': '4.2', 'AVG_K': '3.8'},
@@ -629,68 +712,62 @@ def build_team_data(team_name, roster, team_stats):
         }
     }
     
-    # Load stats for ALL batters (but with shorter timeout)
+    # Load only 7-day stats initially
     for i, batter in enumerate(roster['batters']):
-        if i < 15:  # Limit to 15 batters to avoid timeout
-            logger.info(f"Getting stats for batter: {batter['name']}")
+        if i < 15:  # Limit to prevent timeout
+            logger.info(f"Getting 7-day stats for batter: {batter['name']}")
             
             try:
-                # Get stats with shorter cache timeout to load faster
                 stats_7d = MLBStatsAPI.get_player_stats(batter['id'], 'hitting', 7)
-                stats_10d = stats_7d  # Use 7-day stats for 10-day to save API calls
-                stats_21d = stats_7d  # Use 7-day stats for 21-day to save API calls
-                
+                # Only load 7-day stats, leave others empty for now
                 batter['stats'] = {
                     '7': stats_7d,
-                    '10': stats_10d,
-                    '21': stats_21d
+                    '10': None,  # Will load on tab click
+                    '21': None   # Will load on tab click
                 }
             except:
-                # Fallback if API fails
                 batter['stats'] = {
                     '7': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
-                    '10': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
-                    '21': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
+                    '10': None,
+                    '21': None
                 }
         else:
-            # Placeholder stats for remaining players
             batter['stats'] = {
                 '7': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
-                '10': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
-                '21': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
+                '10': None,
+                '21': None
             }
     
-    # Similar for pitchers - load first 8
+    # Same for pitchers - only 7-day stats
     for i, pitcher in enumerate(roster['pitchers']):
         if i < 15:
-            logger.info(f"Getting stats for pitcher: {pitcher['name']}")
+            logger.info(f"Getting 7-day stats for pitcher: {pitcher['name']}")
             
             try:
                 stats_7d = MLBStatsAPI.get_player_stats(pitcher['id'], 'pitching', 7)
                 pitcher['stats'] = {
                     '7': stats_7d,
-                    '10': stats_7d,
-                    '21': stats_7d
+                    '10': None,
+                    '21': None
                 }
             except:
                 pitcher['stats'] = {
                     '7': {'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0', 'gs': 0, 'sv': 0},
-                    '10': {'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0', 'gs': 0, 'sv': 0},
-                    '21': {'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0', 'gs': 0, 'sv': 0}
+                    '10': None,
+                    '21': None
                 }
         else:
             pitcher['stats'] = {
                 '7': {'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0', 'gs': 0, 'sv': 0},
-                '10': {'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0', 'gs': 0, 'sv': 0},
-                '21': {'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0', 'gs': 0, 'sv': 0}
+                '10': None,
+                '21': None
             }
     
-    # Set lineup and starter
     team_data['lineup'] = roster['batters'][:9]
     if roster['pitchers']:
         team_data['starter'] = roster['pitchers'][0]
     
-    logger.info(f"Team data built for {team_name}")
+    logger.info(f"Team data built for {team_name} - 7-day stats loaded")
     return team_data
 
 # Also update the port configuration at the bottom
