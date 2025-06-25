@@ -662,7 +662,7 @@ def build_team_data(team_name, roster, team_stats):
     
     # Similar for pitchers - load first 8
     for i, pitcher in enumerate(roster['pitchers']):
-        if i < 8:
+        if i < 15:
             logger.info(f"Getting stats for pitcher: {pitcher['name']}")
             
             try:

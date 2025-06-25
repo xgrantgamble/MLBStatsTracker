@@ -241,7 +241,7 @@
     /* Better Mobile Styles */
     @media (max-width: 768px) {
         .team-view {
-            padding: 15px !important;
+            padding: 10px !important;
         }
         
         .team-comparison {
@@ -255,8 +255,16 @@
         }
         
         .team-stats {
-            grid-template-columns: 1fr !important;
-            gap: 10px !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 8px !important;
+        }
+        
+        .stat-item {
+            padding: 8px !important;
+        }
+        
+        .stat-value {
+            font-size: 1.1rem !important;
         }
         
         .roster-columns {
@@ -264,37 +272,134 @@
             gap: 20px !important;
         }
         
+        /* Mobile Table Optimization */
         .stats-table {
-            font-size: 0.75rem !important;
+            font-size: 0.65rem !important;
+            width: 100% !important;
             display: block !important;
             overflow-x: auto !important;
             white-space: nowrap !important;
+            -webkit-overflow-scrolling: touch !important;
+        }
+        
+        .stats-table thead,
+        .stats-table tbody,
+        .stats-table tr {
+            display: table !important;
+            width: 100% !important;
+        }
+        
+        .stats-table th,
+        .stats-table td {
+            padding: 3px 2px !important;
+            font-size: 0.65rem !important;
+            text-align: center !important;
+            border-right: 1px solid #ddd !important;
+        }
+        
+        /* Column Widths for Mobile */
+        .stats-table th:nth-child(1),
+        .stats-table td:nth-child(1) {
+            width: 100px !important;
+            min-width: 100px !important;
+            max-width: 100px !important;
+            text-align: left !important;
+            position: sticky !important;
+            left: 0 !important;
+            background: #f8f9fa !important;
+            z-index: 2 !important;
+            font-size: 0.6rem !important;
+        }
+        
+        .stats-table th:nth-child(2),
+        .stats-table td:nth-child(2) {
+            width: 35px !important;
+            min-width: 35px !important;
+        }
+        
+        .stats-table th:nth-child(3),
+        .stats-table td:nth-child(3),
+        .stats-table th:nth-child(4),
+        .stats-table td:nth-child(4),
+        .stats-table th:nth-child(5),
+        .stats-table td:nth-child(5) {
+            width: 45px !important;
+            min-width: 45px !important;
+        }
+        
+        .stats-table th:nth-child(6),
+        .stats-table td:nth-child(6),
+        .stats-table th:nth-child(7),
+        .stats-table td:nth-child(7),
+        .stats-table th:nth-child(8),
+        .stats-table td:nth-child(8),
+        .stats-table th:nth-child(9),
+        .stats-table td:nth-child(9) {
+            width: 35px !important;
+            min-width: 35px !important;
+        }
+        
+        /* Tab Controls */
+        .stats-controls {
+            flex-wrap: wrap !important;
+            gap: 6px !important;
+            justify-content: center !important;
+        }
+        
+        .tab-btn {
+            padding: 8px 12px !important;
+            font-size: 0.85rem !important;
+            flex: 1 !important;
+            min-width: 80px !important;
+        }
+        
+        /* Section Headers */
+        .section-title {
+            font-size: 1.3rem !important;
+        }
+        
+        .team-column h4 {
+            font-size: 1.1rem !important;
+            padding: 10px !important;
+        }
+        
+        /* Scrolling hint */
+        .stats-table::after {
+            content: "← Scroll for more stats →";
+            display: block;
+            text-align: center;
+            font-size: 0.6rem;
+            color: #666;
+            padding: 5px;
+            background: #f0f0f0;
+        }
+        
+        /* Better conditional formatting visibility on mobile */
+        .stat-good {
+            background-color: #c3e6cb !important;
+            color: #155724 !important;
+            font-weight: bold !important;
+        }
+        
+        .stat-bad {
+            background-color: #f5c6cb !important;
+            color: #721c24 !important;
+            font-weight: bold !important;
+        }
+    }
+
+    /* Landscape mobile optimization */
+    @media (max-width: 768px) and (orientation: landscape) {
+        .stats-table {
+            font-size: 0.7rem !important;
         }
         
         .stats-table th,
         .stats-table td {
             padding: 4px 3px !important;
-            min-width: 45px !important;
-        }
-        
-        .player-name {
-            min-width: 120px !important;
-            position: sticky !important;
-            left: 0 !important;
-            background: #f8f9fa !important;
-            z-index: 1 !important;
-        }
-        
-        .stats-controls {
-            flex-wrap: wrap !important;
-            gap: 8px !important;
-        }
-        
-        .tab-btn {
-            padding: 8px 16px !important;
-            font-size: 0.9rem !important;
         }
     }
+    
 </style>
 {% endblock %}
 
