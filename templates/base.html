@@ -177,6 +177,21 @@
         .back-btn:hover {
             background: #5a6268;
         }
+    @media (max-width: 768px) {
+        .team-comparison {
+            flex-direction: column !important;
+            gap: 15px !important;
+        }
+        .roster-columns {
+            flex-direction: column !important;
+        }
+        .stats-table {
+            font-size: 0.8rem !important;
+        }
+        .stats-table th, .stats-table td {
+            padding: 6px 4px !important;
+        }
+    }
     </style>
     {% block extra_css %}{% endblock %}
 </head>

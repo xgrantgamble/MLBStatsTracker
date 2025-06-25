@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import json
 from collections import defaultdict
 import logging
+import os
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this'
@@ -712,4 +713,5 @@ def build_team_data(team_name, roster, team_stats):
     return team_data
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
