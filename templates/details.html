@@ -237,6 +237,64 @@
             min-width: auto;
         }
     }
+
+    /* Better Mobile Styles */
+    @media (max-width: 768px) {
+        .team-view {
+            padding: 15px !important;
+        }
+        
+        .team-comparison {
+            flex-direction: column !important;
+            gap: 15px !important;
+        }
+        
+        .team-card {
+            min-width: auto !important;
+            padding: 15px !important;
+        }
+        
+        .team-stats {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+        }
+        
+        .roster-columns {
+            flex-direction: column !important;
+            gap: 20px !important;
+        }
+        
+        .stats-table {
+            font-size: 0.75rem !important;
+            display: block !important;
+            overflow-x: auto !important;
+            white-space: nowrap !important;
+        }
+        
+        .stats-table th,
+        .stats-table td {
+            padding: 4px 3px !important;
+            min-width: 45px !important;
+        }
+        
+        .player-name {
+            min-width: 120px !important;
+            position: sticky !important;
+            left: 0 !important;
+            background: #f8f9fa !important;
+            z-index: 1 !important;
+        }
+        
+        .stats-controls {
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+        }
+        
+        .tab-btn {
+            padding: 8px 16px !important;
+            font-size: 0.9rem !important;
+        }
+    }
 </style>
 {% endblock %}
 
