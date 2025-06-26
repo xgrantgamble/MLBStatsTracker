@@ -722,20 +722,20 @@ def build_team_data(team_name, roster, team_stats):
                 # Only load 7-day stats, leave others empty for now
                 batter['stats'] = {
                     '7': stats_7d,
-                    '10': None,  # Will load on tab click
-                    '21': None   # Will load on tab click
+                    '10': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
+                    '21': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
                 }
             except:
                 batter['stats'] = {
                     '7': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
-                    '10': None,
-                    '21': None
+                    '10': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
+                    '21': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
                 }
         else:
             batter['stats'] = {
                 '7': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
-                '10': None,
-                '21': None
+                '10': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
+                '21': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
             }
     
     # Same for pitchers - only 7-day stats
@@ -747,20 +747,20 @@ def build_team_data(team_name, roster, team_stats):
                 stats_7d = MLBStatsAPI.get_player_stats(pitcher['id'], 'pitching', 7)
                 pitcher['stats'] = {
                     '7': stats_7d,
-                    '10': None,
-                    '21': None
+                    '10': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
+                    '21': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
                 }
             except:
                 pitcher['stats'] = {
                     '7': {'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0', 'gs': 0, 'sv': 0},
-                    '10': None,
-                    '21': None
+                    '10': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
+                    '21': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
                 }
         else:
             pitcher['stats'] = {
                 '7': {'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0', 'gs': 0, 'sv': 0},
-                '10': None,
-                '21': None
+                '10': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
+                '21': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
             }
     
     team_data['lineup'] = roster['batters'][:9]
