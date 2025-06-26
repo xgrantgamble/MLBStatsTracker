@@ -7,6 +7,7 @@ from collections import defaultdict
 import logging
 import os
 from functools import lru_cache
+import pytz
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this'
@@ -32,15 +33,18 @@ class MLBStatsAPI:
     def get_todays_games():
         """Get today's MLB games"""
         try:
-            today = datetime.now().strftime('%Y-%m-%d')
+            # Use Eastern Time for MLB schedule
+            eastern = pytz.timezone('US/Eastern')
+            today_eastern = datetime.now(eastern).strftime('%Y-%m-%d')
+            
             url = f"{MLB_API_BASE}/schedule"
             params = {
                 'sportId': 1,  # MLB
-                'date': today,
+                'date': today_eastern,  # Use Eastern date
                 'hydrate': 'team,venue'
             }
             
-            logger.info(f"Fetching games for {today}")
+            logger.info(f"Fetching games for {today_eastern} (Eastern Time)")
             response = requests.get(url, params=params, timeout=10)
             response.raise_for_status()
             data = response.json()
