@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
-from flask_caching import Cache  # NEW IMPORT
+from flask_caching import Cache
 import requests
 from datetime import datetime, timedelta
 import json
@@ -8,14 +8,17 @@ import logging
 import os
 from functools import lru_cache
 import pytz
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this'
 
-# NEW: Configure Flask-Caching
+# Configure Flask-Caching with better settings
 cache = Cache(app, config={
-    'CACHE_TYPE': 'simple',  # Use simple in-memory cache
-    'CACHE_DEFAULT_TIMEOUT': 300  # Default 5 minutes
+    'CACHE_TYPE': 'simple',
+    'CACHE_DEFAULT_TIMEOUT': 300
 })
 
 # Configure logging
@@ -25,97 +28,142 @@ logger = logging.getLogger(__name__)
 # MLB Stats API base URL
 MLB_API_BASE = "https://statsapi.mlb.com/api/v1"
 
+# Rate limiting
+class RateLimiter:
+    def __init__(self, max_calls=100, time_window=60):
+        self.max_calls = max_calls
+        self.time_window = time_window
+        self.calls = []
+        self.lock = threading.Lock()
+    
+    def can_make_call(self):
+        with self.lock:
+            now = time.time()
+            # Remove old calls
+            self.calls = [call_time for call_time in self.calls if now - call_time < self.time_window]
+            
+            if len(self.calls) < self.max_calls:
+                self.calls.append(now)
+                return True
+            return False
+    
+    def wait_if_needed(self):
+        if not self.can_make_call():
+            # Wait for oldest call to expire
+            with self.lock:
+                if self.calls:
+                    wait_time = self.time_window - (time.time() - self.calls[0]) + 1
+                    if wait_time > 0:
+                        time.sleep(wait_time)
+
+# Global rate limiter
+rate_limiter = RateLimiter(max_calls=80, time_window=60)
+
 class MLBStatsAPI:
-    """MLB Stats API integration class"""
+    """MLB Stats API integration class with improved error handling and performance"""
     
     @staticmethod
-    @cache.memoize(timeout=180)  # NEW: Cache for 3 minutes (games change frequently)
-    def get_todays_games():
-        """Get today's MLB games"""
+    def _make_api_request(url, params=None, timeout=10):
+        """Make API request with rate limiting and error handling"""
+        rate_limiter.wait_if_needed()
+        
         try:
-            # Use Eastern Time for MLB schedule
+            response = requests.get(url, params=params, timeout=timeout)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.Timeout:
+            logger.error(f"Timeout for URL: {url}")
+            raise
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request error for URL {url}: {e}")
+            raise
+    
+    @staticmethod
+    @cache.memoize(timeout=180)
+    def get_todays_games():
+        """Get today's MLB games with improved error handling"""
+        try:
             eastern = pytz.timezone('US/Eastern')
             today_eastern = datetime.now(eastern).strftime('%Y-%m-%d')
             
             url = f"{MLB_API_BASE}/schedule"
             params = {
-                'sportId': 1,  # MLB
-                'date': today_eastern,  # Use Eastern date
+                'sportId': 1,
+                'date': today_eastern,
                 'hydrate': 'team,venue'
             }
             
             logger.info(f"Fetching games for {today_eastern} (Eastern Time)")
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
+            data = MLBStatsAPI._make_api_request(url, params)
             
             games = []
             if 'dates' in data and data['dates']:
                 for game in data['dates'][0].get('games', []):
-                    game_info = {
-                        'id': game['gamePk'],
-                        'away_team': game['teams']['away']['team']['name'],
-                        'home_team': game['teams']['home']['team']['name'],
-                        'away_id': game['teams']['away']['team']['id'],
-                        'home_id': game['teams']['home']['team']['id'],
-                        'status': game['status']['detailedState'].lower(),
-                        'game_time': game.get('gameDate', ''),
-                        'venue': game.get('venue', {}).get('name', '')
-                    }
-                    games.append(game_info)
-                    logger.info(f"Game: {game_info['away_team']} @ {game_info['home_team']}")
+                    try:
+                        game_info = {
+                            'id': game['gamePk'],
+                            'away_team': game['teams']['away']['team']['name'],
+                            'home_team': game['teams']['home']['team']['name'],
+                            'away_id': game['teams']['away']['team']['id'],
+                            'home_id': game['teams']['home']['team']['id'],
+                            'status': game['status']['detailedState'].lower(),
+                            'game_time': game.get('gameDate', ''),
+                            'venue': game.get('venue', {}).get('name', '')
+                        }
+                        games.append(game_info)
+                        logger.info(f"Game: {game_info['away_team']} @ {game_info['home_team']}")
+                    except KeyError as e:
+                        logger.warning(f"Missing data in game info: {e}")
+                        continue
             
             return games
             
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             logger.error(f"Error fetching today's games: {e}")
             return []
     
     @staticmethod
-    @cache.memoize(timeout=86400)  # NEW: Cache for 24 hours (rosters rarely change)
+    @cache.memoize(timeout=86400)
     def get_team_roster(team_id):
-        """Get team roster"""
+        """Get team roster with better error handling"""
         try:
             url = f"{MLB_API_BASE}/teams/{team_id}/roster"
             params = {'hydrate': 'person'}
             
             logger.info(f"Fetching roster for team {team_id}")
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
+            data = MLBStatsAPI._make_api_request(url, params)
             
-            roster = {
-                'batters': [],
-                'pitchers': []
-            }
+            roster = {'batters': [], 'pitchers': []}
             
             for player in data.get('roster', []):
-                player_info = {
-                    'id': player['person']['id'],
-                    'name': player['person']['fullName'],
-                    'position': player['position']['abbreviation'],
-                    'jersey_number': player.get('jerseyNumber', '')
-                }
-                
-                # Categorize as batter or pitcher
-                if player['position']['type'] == 'Pitcher':
-                    roster['pitchers'].append(player_info)
-                else:
-                    roster['batters'].append(player_info)
+                try:
+                    player_info = {
+                        'id': player['person']['id'],
+                        'name': player['person']['fullName'],
+                        'position': player['position']['abbreviation'],
+                        'jersey_number': player.get('jerseyNumber', '')
+                    }
+                    
+                    if player['position']['type'] == 'Pitcher':
+                        roster['pitchers'].append(player_info)
+                    else:
+                        roster['batters'].append(player_info)
+                except KeyError as e:
+                    logger.warning(f"Missing player data: {e}")
+                    continue
             
             logger.info(f"Roster for team {team_id}: {len(roster['batters'])} batters, {len(roster['pitchers'])} pitchers")
             return roster
             
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             logger.error(f"Error fetching roster for team {team_id}: {e}")
             return {'batters': [], 'pitchers': []}
     
     @staticmethod
-    @cache.memoize(timeout=21600)  # NEW: Cache for 6 hours (stats update daily)
+    @cache.memoize(timeout=21600)
     def get_player_stats(player_id, stat_type='hitting', days=7):
-        """Get player stats for the last N days using game logs"""
+        """Get player stats with fallback handling"""
         try:
-            # Use game logs for rolling averages
             end_date = datetime.now()
             start_date = end_date - timedelta(days=days)
             
@@ -128,28 +176,23 @@ class MLBStatsAPI:
                 'season': 2025
             }
             
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
+            data = MLBStatsAPI._make_api_request(url, params)
             
             if not data.get('stats') or not data['stats'][0].get('splits'):
-                logger.warning(f"No {days}-day stats found for player {player_id}")
-                # Fallback to season stats if no recent games
+                logger.warning(f"No {days}-day stats found for player {player_id}, using season stats")
                 return MLBStatsAPI.get_season_stats(player_id, stat_type)
             
-            # Aggregate stats from game logs
             if stat_type == 'hitting':
                 return MLBStatsAPI._aggregate_hitting_stats(data['stats'][0]['splits'])
             else:
                 return MLBStatsAPI._aggregate_pitching_stats(data['stats'][0]['splits'])
                 
-        except (requests.exceptions.RequestException, ValueError, TypeError) as e:
+        except Exception as e:
             logger.error(f"Error fetching {days}-day stats for player {player_id}: {e}")
-            # Fallback to season stats
             return MLBStatsAPI.get_season_stats(player_id, stat_type)
     
     @staticmethod
-    @cache.memoize(timeout=43200)  # NEW: Cache for 12 hours (season stats change slowly)
+    @cache.memoize(timeout=43200)
     def get_season_stats(player_id, stat_type='hitting'):
         """Get player season stats as fallback"""
         try:
@@ -160,12 +203,11 @@ class MLBStatsAPI:
                 'season': 2025
             }
             
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
+            data = MLBStatsAPI._make_api_request(url, params)
             
             if not data.get('stats') or not data['stats'][0].get('splits'):
-                return {}
+                logger.warning(f"No season stats found for player {player_id}")
+                return MLBStatsAPI._get_default_stats(stat_type)
             
             season_stats = data['stats'][0]['splits'][0]['stat']
             
@@ -176,33 +218,46 @@ class MLBStatsAPI:
                 
         except Exception as e:
             logger.error(f"Error fetching season stats for player {player_id}: {e}")
-            return {}
+            return MLBStatsAPI._get_default_stats(stat_type)
+    
+    @staticmethod
+    def _get_default_stats(stat_type):
+        """Return default stats when API fails"""
+        if stat_type == 'hitting':
+            return {
+                'avg': '.000', 'obp': '.000', 'slg': '.000', 'ops': '.000',
+                'ab': 0, 'h': 0, 'hr': 0, 'rbi': 0, 'bb': 0, 'so': 0
+            }
+        else:
+            return {
+                'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0',
+                'h': 0, 'hr': 0, 'sv': 0, 'gs': 0, 'er': 0
+            }
     
     @staticmethod
     def _aggregate_hitting_stats(game_logs):
-        """Aggregate hitting stats from game logs"""
+        """Aggregate hitting stats from game logs with better error handling"""
         try:
             totals = {
-                'at_bats': 0,
-                'hits': 0,
-                'home_runs': 0,
-                'rbis': 0,
-                'walks': 0,
-                'strikeouts': 0,
-                'total_bases': 0
+                'at_bats': 0, 'hits': 0, 'home_runs': 0, 'rbis': 0,
+                'walks': 0, 'strikeouts': 0, 'total_bases': 0
             }
             
             for game in game_logs:
                 stats = game.get('stat', {})
-                totals['at_bats'] += int(stats.get('atBats', 0))
-                totals['hits'] += int(stats.get('hits', 0))
-                totals['home_runs'] += int(stats.get('homeRuns', 0))
-                totals['rbis'] += int(stats.get('rbi', 0))
-                totals['walks'] += int(stats.get('baseOnBalls', 0))
-                totals['strikeouts'] += int(stats.get('strikeOuts', 0))
-                totals['total_bases'] += int(stats.get('totalBases', 0))
+                try:
+                    totals['at_bats'] += int(stats.get('atBats', 0))
+                    totals['hits'] += int(stats.get('hits', 0))
+                    totals['home_runs'] += int(stats.get('homeRuns', 0))
+                    totals['rbis'] += int(stats.get('rbi', 0))
+                    totals['walks'] += int(stats.get('baseOnBalls', 0))
+                    totals['strikeouts'] += int(stats.get('strikeOuts', 0))
+                    totals['total_bases'] += int(stats.get('totalBases', 0))
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Invalid stat value in game log: {e}")
+                    continue
             
-            # Calculate derived stats
+            # Calculate derived stats safely
             avg = totals['hits'] / totals['at_bats'] if totals['at_bats'] > 0 else 0
             obp = (totals['hits'] + totals['walks']) / (totals['at_bats'] + totals['walks']) if (totals['at_bats'] + totals['walks']) > 0 else 0
             slg = totals['total_bases'] / totals['at_bats'] if totals['at_bats'] > 0 else 0
@@ -220,47 +275,43 @@ class MLBStatsAPI:
                 'bb': totals['walks'],
                 'so': totals['strikeouts']
             }
-        except (ValueError, TypeError, ZeroDivisionError) as e:
+        except Exception as e:
             logger.error(f"Error aggregating hitting stats: {e}")
-            return {
-                'avg': '.000', 'obp': '.000', 'slg': '.000', 'ops': '.000',
-                'ab': 0, 'h': 0, 'hr': 0, 'rbi': 0, 'bb': 0, 'so': 0
-            }
+            return MLBStatsAPI._get_default_stats('hitting')
     
     @staticmethod
     def _aggregate_pitching_stats(game_logs):
-        """Aggregate pitching stats from game logs"""
+        """Aggregate pitching stats from game logs with better error handling"""
         try:
             totals = {
-                'innings_pitched': 0.0,
-                'hits': 0,
-                'earned_runs': 0,
-                'walks': 0,
-                'strikeouts': 0,
-                'home_runs': 0,
-                'saves': 0,
-                'games_started': 0
+                'innings_pitched': 0.0, 'hits': 0, 'earned_runs': 0,
+                'walks': 0, 'strikeouts': 0, 'home_runs': 0,
+                'saves': 0, 'games_started': 0
             }
             
             for game in game_logs:
                 stats = game.get('stat', {})
-                # Convert innings pitched from string format (e.g., "6.1" means 6 and 1/3 innings)
-                ip_str = str(stats.get('inningsPitched', '0'))
-                if '.' in ip_str:
-                    whole, third = ip_str.split('.')
-                    totals['innings_pitched'] += int(whole) + (int(third) / 3.0)
-                else:
-                    totals['innings_pitched'] += float(ip_str)
-                
-                totals['hits'] += int(stats.get('hits', 0))
-                totals['earned_runs'] += int(stats.get('earnedRuns', 0))
-                totals['walks'] += int(stats.get('baseOnBalls', 0))
-                totals['strikeouts'] += int(stats.get('strikeOuts', 0))
-                totals['home_runs'] += int(stats.get('homeRuns', 0))
-                totals['saves'] += int(stats.get('saves', 0))
-                totals['games_started'] += int(stats.get('gamesStarted', 0))
+                try:
+                    # Convert innings pitched safely
+                    ip_str = str(stats.get('inningsPitched', '0'))
+                    if '.' in ip_str:
+                        whole, third = ip_str.split('.')
+                        totals['innings_pitched'] += int(whole) + (int(third) / 3.0)
+                    else:
+                        totals['innings_pitched'] += float(ip_str)
+                    
+                    totals['hits'] += int(stats.get('hits', 0))
+                    totals['earned_runs'] += int(stats.get('earnedRuns', 0))
+                    totals['walks'] += int(stats.get('baseOnBalls', 0))
+                    totals['strikeouts'] += int(stats.get('strikeOuts', 0))
+                    totals['home_runs'] += int(stats.get('homeRuns', 0))
+                    totals['saves'] += int(stats.get('saves', 0))
+                    totals['games_started'] += int(stats.get('gamesStarted', 0))
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Invalid pitching stat in game log: {e}")
+                    continue
             
-            # Calculate derived stats
+            # Calculate derived stats safely
             era = (totals['earned_runs'] * 9) / totals['innings_pitched'] if totals['innings_pitched'] > 0 else 0
             whip = (totals['walks'] + totals['hits']) / totals['innings_pitched'] if totals['innings_pitched'] > 0 else 0
             
@@ -276,23 +327,19 @@ class MLBStatsAPI:
                 'gs': totals['games_started'],
                 'er': totals['earned_runs']
             }
-        except (ValueError, TypeError, ZeroDivisionError) as e:
+        except Exception as e:
             logger.error(f"Error aggregating pitching stats: {e}")
-            return {
-                'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0',
-                'h': 0, 'hr': 0, 'sv': 0, 'gs': 0, 'er': 0
-            }
+            return MLBStatsAPI._get_default_stats('pitching')
     
     @staticmethod
     def _format_hitting_stats(stats):
-        """Format hitting stats from API response"""
+        """Format hitting stats with safe type conversion"""
         try:
             at_bats = int(stats.get('atBats', 0))
             hits = int(stats.get('hits', 0))
             total_bases = int(stats.get('totalBases', 0))
             walks = int(stats.get('baseOnBalls', 0))
             
-            # Calculate derived stats
             avg = hits / at_bats if at_bats > 0 else 0
             obp = (hits + walks) / (at_bats + walks) if (at_bats + walks) > 0 else 0
             slg = total_bases / at_bats if at_bats > 0 else 0
@@ -310,23 +357,19 @@ class MLBStatsAPI:
                 'bb': walks,
                 'so': int(stats.get('strikeOuts', 0))
             }
-        except (ValueError, TypeError, ZeroDivisionError) as e:
+        except Exception as e:
             logger.error(f"Error formatting hitting stats: {e}")
-            return {
-                'avg': '.000', 'obp': '.000', 'slg': '.000', 'ops': '.000',
-                'ab': 0, 'h': 0, 'hr': 0, 'rbi': 0, 'bb': 0, 'so': 0
-            }
+            return MLBStatsAPI._get_default_stats('hitting')
     
     @staticmethod
     def _format_pitching_stats(stats):
-        """Format pitching stats from API response"""
+        """Format pitching stats with safe type conversion"""
         try:
             innings_pitched = float(stats.get('inningsPitched', '0') or '0')
             hits = int(stats.get('hits', 0))
             earned_runs = int(stats.get('earnedRuns', 0))
             walks = int(stats.get('baseOnBalls', 0))
             
-            # Calculate derived stats
             era = (earned_runs * 9) / innings_pitched if innings_pitched > 0 else 0
             whip = (walks + hits) / innings_pitched if innings_pitched > 0 else 0
             
@@ -342,17 +385,14 @@ class MLBStatsAPI:
                 'gs': int(stats.get('gamesStarted', 0)),
                 'er': earned_runs
             }
-        except (ValueError, TypeError, ZeroDivisionError) as e:
+        except Exception as e:
             logger.error(f"Error formatting pitching stats: {e}")
-            return {
-                'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0',
-                'h': 0, 'hr': 0, 'sv': 0, 'gs': 0, 'er': 0
-            }
+            return MLBStatsAPI._get_default_stats('pitching')
 
     @staticmethod
-    @cache.memoize(timeout=21600)  # NEW: Cache for 6 hours (team stats update daily)
+    @cache.memoize(timeout=21600)
     def get_team_stats(team_id, season=2025):
-        """Get team season stats"""
+        """Get team season stats with better error handling"""
         try:
             url = f"{MLB_API_BASE}/teams/{team_id}/stats"
             params = {
@@ -361,145 +401,202 @@ class MLBStatsAPI:
                 'season': season
             }
             
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
+            data = MLBStatsAPI._make_api_request(url, params)
             
             team_stats = {
-                'AVG': '.000',
-                'OBP': '.000', 
-                'SLG': '.000',
-                'HR': '0',
-                'ERA': '0.00',
-                'WHIP': '0.00',
-                'SV': '0'
+                'AVG': '.000', 'OBP': '.000', 'SLG': '.000', 'HR': '0',
+                'ERA': '0.00', 'WHIP': '0.00', 'SV': '0'
             }
             
             for stat_group in data.get('stats', []):
                 group_name = stat_group.get('group', {}).get('displayName', '')
                 if group_name == 'hitting' and stat_group.get('splits'):
                     hitting_stats = stat_group['splits'][0]['stat']
-                    # Safely convert to float then format
-                    avg_val = float(hitting_stats.get('avg', 0))
-                    obp_val = float(hitting_stats.get('obp', 0))
-                    slg_val = float(hitting_stats.get('slg', 0))
-                    
-                    team_stats['AVG'] = f"{avg_val:.3f}"
-                    team_stats['OBP'] = f"{obp_val:.3f}"
-                    team_stats['SLG'] = f"{slg_val:.3f}"
-                    team_stats['HR'] = str(hitting_stats.get('homeRuns', 0))
+                    try:
+                        avg_val = float(hitting_stats.get('avg', 0))
+                        obp_val = float(hitting_stats.get('obp', 0))
+                        slg_val = float(hitting_stats.get('slg', 0))
+                        
+                        team_stats['AVG'] = f"{avg_val:.3f}"
+                        team_stats['OBP'] = f"{obp_val:.3f}"
+                        team_stats['SLG'] = f"{slg_val:.3f}"
+                        team_stats['HR'] = str(hitting_stats.get('homeRuns', 0))
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Error parsing hitting stats: {e}")
+                
                 elif group_name == 'pitching' and stat_group.get('splits'):
                     pitching_stats = stat_group['splits'][0]['stat']
-                    # Safely convert to float then format
-                    era_val = float(pitching_stats.get('era', 0))
-                    whip_val = float(pitching_stats.get('whip', 0))
-                    
-                    team_stats['ERA'] = f"{era_val:.2f}"
-                    team_stats['WHIP'] = f"{whip_val:.2f}"
-                    team_stats['SV'] = str(pitching_stats.get('saves', 0))
+                    try:
+                        era_val = float(pitching_stats.get('era', 0))
+                        whip_val = float(pitching_stats.get('whip', 0))
+                        
+                        team_stats['ERA'] = f"{era_val:.2f}"
+                        team_stats['WHIP'] = f"{whip_val:.2f}"
+                        team_stats['SV'] = str(pitching_stats.get('saves', 0))
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Error parsing pitching stats: {e}")
             
             logger.info(f"Team {team_id} stats: {team_stats}")
             return team_stats
             
-        except (requests.exceptions.RequestException, ValueError, TypeError) as e:
+        except Exception as e:
             logger.error(f"Error fetching team stats for {team_id}: {e}")
             return {
                 'AVG': '.245', 'OBP': '.315', 'SLG': '.425', 'HR': '15',
                 'ERA': '4.15', 'WHIP': '1.32', 'SV': '5'
             }
 
-# Flask Routes (unchanged except for potential cache clearing)
+# Flask Routes
 @app.route('/')
 def home():
     """Home page showing today's games"""
-    games = MLBStatsAPI.get_todays_games()
-    favorites = session.get('favorites', [])
-    
-    # Format current date
-    current_date = datetime.now().strftime('%A, %B %d, %Y')
-    
-    # Format game times for display
-    for game in games:
-        if game['game_time']:
-            try:
-                dt = datetime.fromisoformat(game['game_time'].replace('Z', '+00:00'))
-                game['formatted_time'] = dt.strftime('%I:%M %p ET')
-            except:
-                game['formatted_time'] = 'TBD'
-        else:
-            game['formatted_time'] = 'TBD'
+    try:
+        games = MLBStatsAPI.get_todays_games()
+        favorites = session.get('favorites', [])
+        current_date = datetime.now().strftime('%A, %B %d, %Y')
         
-        # Check if game is postponed
-        if 'postponed' in game['status'] or 'suspended' in game['status']:
-            game['formatted_time'] = 'Postponed'
-            game['status'] = 'postponed'
+        # Format game times for display
+        for game in games:
+            if game['game_time']:
+                try:
+                    dt = datetime.fromisoformat(game['game_time'].replace('Z', '+00:00'))
+                    game['formatted_time'] = dt.strftime('%I:%M %p ET')
+                except Exception as e:
+                    logger.warning(f"Error formatting game time: {e}")
+                    game['formatted_time'] = 'TBD'
+            else:
+                game['formatted_time'] = 'TBD'
+            
+            # Check if game is postponed
+            if 'postponed' in game['status'] or 'suspended' in game['status']:
+                game['formatted_time'] = 'Postponed'
+                game['status'] = 'postponed'
+        
+        return render_template('home.html', games=games, favorites=favorites, current_date=current_date)
     
-    return render_template('home.html', games=games, favorites=favorites, current_date=current_date)
+    except Exception as e:
+        logger.error(f"Error in home route: {e}")
+        return render_template('home.html', games=[], favorites=[], current_date=datetime.now().strftime('%A, %B %d, %Y'))
 
 @app.route('/api/games/today')
 def api_todays_games():
     """API endpoint for today's games"""
-    games = MLBStatsAPI.get_todays_games()
-    return jsonify(games)
+    try:
+        games = MLBStatsAPI.get_todays_games()
+        return jsonify(games)
+    except Exception as e:
+        logger.error(f"Error in API endpoint: {e}")
+        return jsonify({'error': 'Failed to fetch games'}), 500
 
-# NEW: Optional cache clearing endpoint for debugging
 @app.route('/admin/clear-cache')
 def clear_cache():
-    """Clear all cached data - useful for debugging"""
-    cache.clear()
-    return jsonify({"message": "Cache cleared successfully"})
+    """Clear all cached data"""
+    try:
+        cache.clear()
+        return jsonify({"message": "Cache cleared successfully"})
+    except Exception as e:
+        logger.error(f"Error clearing cache: {e}")
+        return jsonify({"error": "Failed to clear cache"}), 500
+
+def load_player_stats_batch(players, stat_type, days=7, max_workers=5):
+    """Load player stats in parallel to improve performance"""
+    results = []
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all requests
+        future_to_player = {
+            executor.submit(MLBStatsAPI.get_player_stats, player['id'], stat_type, days): player
+            for player in players[:15]  # Limit to 15 players
+        }
+        
+        # Collect results
+        for future in as_completed(future_to_player):
+            player = future_to_player[future]
+            try:
+                stats = future.result(timeout=10)  # 10 second timeout per request
+                player['stats'] = {str(days): stats}
+                results.append(player)
+            except Exception as e:
+                logger.error(f"Error loading stats for {player['name']}: {e}")
+                player['stats'] = {str(days): MLBStatsAPI._get_default_stats(stat_type)}
+                results.append(player)
+    
+    # Sort results to maintain original order
+    results.sort(key=lambda x: next(i for i, p in enumerate(players) if p['id'] == x['id']))
+    return results
 
 @app.route('/details/<int:home_id>/<int:away_id>')
 def view_details(home_id, away_id):
-    """Team details page"""
+    """Team details page with improved performance"""
     logger.info(f"Loading details for {away_id} @ {home_id}")
     
-    # Format current date
-    current_date = datetime.now().strftime('%A, %B %d, %Y')
+    try:
+        current_date = datetime.now().strftime('%A, %B %d, %Y')
+        
+        # Get team rosters
+        home_roster = MLBStatsAPI.get_team_roster(home_id)
+        away_roster = MLBStatsAPI.get_team_roster(away_id)
+        
+        # Get team names
+        home_team_name = get_team_name(home_id)
+        away_team_name = get_team_name(away_id)
+        
+        # Get team stats
+        home_team_stats = MLBStatsAPI.get_team_stats(home_id)
+        away_team_stats = MLBStatsAPI.get_team_stats(away_id)
+        
+        # Build team data with parallel loading
+        home_team = build_team_data_optimized(home_team_name, home_roster, home_team_stats, home_id)
+        away_team = build_team_data_optimized(away_team_name, away_roster, away_team_stats, away_id)
+        
+        favorites = session.get('favorites', [])
+        
+        return render_template('details.html', 
+                             home_team=home_team, 
+                             away_team=away_team, 
+                             favorites=favorites,
+                             current_date=current_date)
     
-    # Get team rosters
-    home_roster = MLBStatsAPI.get_team_roster(home_id)
-    away_roster = MLBStatsAPI.get_team_roster(away_id)
-    
-    # Get team names
-    home_team_name = get_team_name(home_id)
-    away_team_name = get_team_name(away_id)
-    
-    # Get team stats
-    home_team_stats = MLBStatsAPI.get_team_stats(home_id)
-    away_team_stats = MLBStatsAPI.get_team_stats(away_id)
-    
-    # Build team data
-    home_team = build_team_data(home_team_name, home_roster, home_team_stats)
-    away_team = build_team_data(away_team_name, away_roster, away_team_stats)
-    
-    favorites = session.get('favorites', [])
-    
-    return render_template('details.html', 
-                         home_team=home_team, 
-                         away_team=away_team, 
-                         favorites=favorites,
-                         current_date=current_date)
+    except Exception as e:
+        logger.error(f"Error in details route: {e}")
+        # Return error page or minimal data
+        return render_template('details.html', 
+                             home_team={'name': get_team_name(home_id), 'fullRoster': {'batters': [], 'pitchers': []}}, 
+                             away_team={'name': get_team_name(away_id), 'fullRoster': {'batters': [], 'pitchers': []}}, 
+                             favorites=[],
+                             current_date=datetime.now().strftime('%A, %B %d, %Y'))
 
 @app.route('/favorites', methods=['POST'])
 def toggle_favorite():
     """Toggle team favorite status"""
-    team_name = request.form.get('favorite')
-    favorites = session.get('favorites', [])
+    try:
+        team_name = request.form.get('favorite')
+        if not team_name:
+            return redirect(request.referrer or url_for('home'))
+        
+        favorites = session.get('favorites', [])
+        
+        if team_name in favorites:
+            favorites.remove(team_name)
+        else:
+            favorites.append(team_name)
+        
+        session['favorites'] = favorites
+        return redirect(request.referrer or url_for('home'))
     
-    if team_name in favorites:
-        favorites.remove(team_name)
-    else:
-        favorites.append(team_name)
-    
-    session['favorites'] = favorites
-    return redirect(request.referrer or url_for('home'))
+    except Exception as e:
+        logger.error(f"Error toggling favorite: {e}")
+        return redirect(request.referrer or url_for('home'))
 
 @app.route('/reset_favorites', methods=['POST'])
 def reset_favorites():
     """Reset all favorites"""
-    session['favorites'] = []
-    return redirect(url_for('home'))
+    try:
+        session['favorites'] = []
+        return redirect(url_for('home'))
+    except Exception as e:
+        logger.error(f"Error resetting favorites: {e}")
+        return redirect(url_for('home'))
 
 @app.route('/api/load-stats/<int:home_id>/<int:away_id>/<int:days>')
 def load_stats_for_period(home_id, away_id, days):
@@ -509,74 +606,18 @@ def load_stats_for_period(home_id, away_id, days):
         home_roster = MLBStatsAPI.get_team_roster(home_id)
         away_roster = MLBStatsAPI.get_team_roster(away_id)
         
+        # Load stats in parallel
+        away_batters = load_player_stats_batch(away_roster['batters'], 'hitting', days)
+        home_batters = load_player_stats_batch(home_roster['batters'], 'hitting', days)
+        away_pitchers = load_player_stats_batch(away_roster['pitchers'], 'pitching', days)
+        home_pitchers = load_player_stats_batch(home_roster['pitchers'], 'pitching', days)
+        
         result = {
-            'home_batters': [],
-            'away_batters': [],
-            'home_pitchers': [],
-            'away_pitchers': []
+            'home_batters': [{'id': p['id'], 'name': p['name'], 'stats': p['stats']} for p in home_batters],
+            'away_batters': [{'id': p['id'], 'name': p['name'], 'stats': p['stats']} for p in away_batters],
+            'home_pitchers': [{'id': p['id'], 'name': p['name'], 'stats': p['stats']} for p in home_pitchers],
+            'away_pitchers': [{'id': p['id'], 'name': p['name'], 'stats': p['stats']} for p in away_pitchers]
         }
-        
-        # Load stats for requested period
-        for i, batter in enumerate(away_roster['batters'][:15]):
-            try:
-                stats = MLBStatsAPI.get_player_stats(batter['id'], 'hitting', days)
-                result['away_batters'].append({
-                    'id': batter['id'],
-                    'name': batter['name'],
-                    'stats': stats
-                })
-            except:
-                result['away_batters'].append({
-                    'id': batter['id'],
-                    'name': batter['name'],
-                    'stats': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
-                })
-        
-        for i, batter in enumerate(home_roster['batters'][:15]):
-            try:
-                stats = MLBStatsAPI.get_player_stats(batter['id'], 'hitting', days)
-                result['home_batters'].append({
-                    'id': batter['id'],
-                    'name': batter['name'],
-                    'stats': stats
-                })
-            except:
-                result['home_batters'].append({
-                    'id': batter['id'],
-                    'name': batter['name'],
-                    'stats': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
-                })
-        
-        # Similar for pitchers...
-        for i, pitcher in enumerate(away_roster['pitchers'][:15]):
-            try:
-                stats = MLBStatsAPI.get_player_stats(pitcher['id'], 'pitching', days)
-                result['away_pitchers'].append({
-                    'id': pitcher['id'],
-                    'name': pitcher['name'],
-                    'stats': stats
-                })
-            except:
-                result['away_pitchers'].append({
-                    'id': pitcher['id'],
-                    'name': pitcher['name'],
-                    'stats': {'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0', 'gs': 0, 'sv': 0}
-                })
-        
-        for i, pitcher in enumerate(home_roster['pitchers'][:15]):
-            try:
-                stats = MLBStatsAPI.get_player_stats(pitcher['id'], 'pitching', days)
-                result['home_pitchers'].append({
-                    'id': pitcher['id'],
-                    'name': pitcher['name'],
-                    'stats': stats
-                })
-            except:
-                result['home_pitchers'].append({
-                    'id': pitcher['id'],
-                    'name': pitcher['name'],
-                    'stats': {'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0', 'gs': 0, 'sv': 0}
-                })
         
         return jsonify(result)
         
@@ -584,92 +625,75 @@ def load_stats_for_period(home_id, away_id, days):
         logger.error(f"Error loading {days}-day stats: {e}")
         return jsonify({'error': 'Failed to load stats'}), 500
 
-# Helper Functions (unchanged)
+# Helper Functions
 def get_team_name(team_id):
-    """Get team name by ID"""
+    """Get team name by ID with complete mapping"""
     team_names = {
         108: "Los Angeles Angels", 109: "Arizona Diamondbacks", 110: "Baltimore Orioles",
-        111: "Boston Red Sox", 112: "Detroit Tigers", 113: "Kansas City Royals",
-        114: "Milwaukee Brewers", 115: "Minnesota Twins", 116: "New York Yankees",
-        117: "Oakland Athletics", 118: "Seattle Mariners", 119: "Los Angeles Dodgers",
-        120: "Washington Nationals", 121: "New York Mets", 133: "Houston Astros",
-        134: "Pittsburgh Pirates", 135: "San Diego Padres", 137: "San Francisco Giants",
-        138: "St. Louis Cardinals", 139: "Tampa Bay Rays", 140: "Texas Rangers",
-        141: "Toronto Blue Jays", 142: "Minnesota Twins", 143: "Philadelphia Phillies",
-        144: "Atlanta Braves", 145: "Chicago White Sox", 146: "Miami Marlins",
-        147: "New York Yankees", 158: "Milwaukee Brewers", 159: "Miami Marlins",
-        160: "Chicago Cubs", 161: "Cincinnati Reds", 162: "Colorado Rockies"
+        111: "Boston Red Sox", 112: "Chicago Cubs", 113: "Cincinnati Reds",
+        114: "Cleveland Guardians", 115: "Colorado Rockies", 116: "Detroit Tigers",
+        117: "Houston Astros", 118: "Kansas City Royals", 119: "Los Angeles Dodgers",
+        120: "Washington Nationals", 121: "New York Mets", 133: "Oakland Athletics",
+        134: "Pittsburgh Pirates", 135: "San Diego Padres", 136: "Seattle Mariners",
+        137: "San Francisco Giants", 138: "St. Louis Cardinals", 139: "Tampa Bay Rays",
+        140: "Texas Rangers", 141: "Toronto Blue Jays", 142: "Minnesota Twins",
+        143: "Philadelphia Phillies", 144: "Atlanta Braves", 145: "Chicago White Sox",
+        146: "Miami Marlins", 147: "New York Yankees", 158: "Milwaukee Brewers"
     }
     return team_names.get(team_id, f"Team {team_id}")
 
 def calculate_rolling_team_stats(batters, pitchers, period):
-    """Calculate team rolling averages from player stats"""
+    """Calculate team rolling averages from player stats with better error handling"""
     try:
         # Initialize totals for batting
         batting_totals = {
-            'total_at_bats': 0,
-            'total_hits': 0,
-            'total_walks': 0,
-            'total_total_bases': 0,
-            'total_home_runs': 0,
-            'valid_batters': 0
+            'total_at_bats': 0, 'total_hits': 0, 'total_walks': 0,
+            'total_total_bases': 0, 'total_home_runs': 0, 'valid_batters': 0
         }
         
         # Sum up batting stats from all players
         for batter in batters:
             batter_stats = batter.get('stats', {}).get(str(period), {})
-            if batter_stats and batter_stats.get('ab', 0) > 0:  # Only count players with at-bats
-                batting_totals['total_at_bats'] += batter_stats.get('ab', 0)
-                batting_totals['total_hits'] += batter_stats.get('h', 0)
-                batting_totals['total_walks'] += batter_stats.get('bb', 0)
-                batting_totals['total_home_runs'] += batter_stats.get('hr', 0)
-                # Calculate total bases from SLG if available
-                slg = float(batter_stats.get('slg', '0').replace('.', '0.') if '.' not in batter_stats.get('slg', '0') else batter_stats.get('slg', '0'))
-                total_bases = slg * batter_stats.get('ab', 0)
-                batting_totals['total_total_bases'] += total_bases
-                batting_totals['valid_batters'] += 1
+            if batter_stats and batter_stats.get('ab', 0) > 0:
+                try:
+                    batting_totals['total_at_bats'] += int(batter_stats.get('ab', 0))
+                    batting_totals['total_hits'] += int(batter_stats.get('h', 0))
+                    batting_totals['total_walks'] += int(batter_stats.get('bb', 0))
+                    batting_totals['total_home_runs'] += int(batter_stats.get('hr', 0))
+                    
+                    # Calculate total bases from SLG safely
+                    slg_str = batter_stats.get('slg', '0.000')
+                    if slg_str.startswith('.'):
+                        slg_str = '0' + slg_str
+                    slg = float(slg_str)
+                    total_bases = slg * int(batter_stats.get('ab', 0))
+                    batting_totals['total_total_bases'] += total_bases
+                    batting_totals['valid_batters'] += 1
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Error processing batter stats: {e}")
+                    continue
         
-        # Calculate team batting averages
+        # Calculate team batting averages safely
         team_avg = batting_totals['total_hits'] / batting_totals['total_at_bats'] if batting_totals['total_at_bats'] > 0 else 0
         team_obp = (batting_totals['total_hits'] + batting_totals['total_walks']) / (batting_totals['total_at_bats'] + batting_totals['total_walks']) if (batting_totals['total_at_bats'] + batting_totals['total_walks']) > 0 else 0
         team_slg = batting_totals['total_total_bases'] / batting_totals['total_at_bats'] if batting_totals['total_at_bats'] > 0 else 0
         
-        # Initialize totals for pitching
-        pitching_totals = {
-            'total_innings': 0.0,
-            'total_earned_runs': 0,
-            'total_hits_allowed': 0,
-            'total_walks_allowed': 0,
-            'valid_pitchers': 0
-        }
-        
-        # Sum up pitching stats from all players
-        for pitcher in pitchers:
-            pitcher_stats = pitcher.get('stats', {}).get(str(period), {})
-            if pitcher_stats and float(pitcher_stats.get('ip', '0')) > 0:  # Only count pitchers with innings
-                ip_str = str(pitcher_stats.get('ip', '0.0'))
-                innings = float(ip_str)
-                pitching_totals['total_innings'] += innings
-                pitching_totals['total_earned_runs'] += pitcher_stats.get('er', 0)
-                pitching_totals['total_hits_allowed'] += pitcher_stats.get('h', 0)
-                pitching_totals['total_walks_allowed'] += pitcher_stats.get('bb', 0)
-                pitching_totals['valid_pitchers'] += 1
-        
-        # Calculate team pitching averages
-        team_era = (pitching_totals['total_earned_runs'] * 9) / pitching_totals['total_innings'] if pitching_totals['total_innings'] > 0 else 0
-        team_whip = (pitching_totals['total_hits_allowed'] + pitching_totals['total_walks_allowed']) / pitching_totals['total_innings'] if pitching_totals['total_innings'] > 0 else 0
-        
-        # Calculate average hits and strikeouts per game
+        # Calculate average hits and strikeouts
         avg_hits = batting_totals['total_hits'] / batting_totals['valid_batters'] if batting_totals['valid_batters'] > 0 else 0
         
         # Calculate average strikeouts from pitchers
         total_strikeouts = 0
+        valid_pitchers = 0
         for pitcher in pitchers:
             pitcher_stats = pitcher.get('stats', {}).get(str(period), {})
             if pitcher_stats and float(pitcher_stats.get('ip', '0')) > 0:
-                total_strikeouts += pitcher_stats.get('k', 0)
+                try:
+                    total_strikeouts += int(pitcher_stats.get('k', 0))
+                    valid_pitchers += 1
+                except (ValueError, TypeError):
+                    continue
         
-        avg_k = total_strikeouts / pitching_totals['valid_pitchers'] if pitching_totals['valid_pitchers'] > 0 else 0
+        avg_k = total_strikeouts / valid_pitchers if valid_pitchers > 0 else 0
         
         return {
             'AVG': f"{team_avg:.3f}",
@@ -683,99 +707,97 @@ def calculate_rolling_team_stats(batters, pitchers, period):
     except Exception as e:
         logger.error(f"Error calculating rolling team stats for {period} days: {e}")
         return {
-            'AVG': '.000',
-            'OBP': '.000', 
-            'SLG': '.000',
-            'HR': '0',
-            'ERA': '0.00',
-            'WHIP': '0.00'
+            'AVG': '.000', 'OBP': '.000', 'SLG': '.000',
+            'HR': '0', 'AVG_HITS': '0.0', 'AVG_K': '0.0'
         }
 
-# Change your build_team_data function to load stats lazily
-def build_team_data(team_name, roster, team_stats):
-    """Build team data with only 7-day stats initially"""
-    logger.info(f"Building team data for {team_name}")
+def build_team_data_optimized(team_name, roster, team_stats, team_id):
+    """Build team data with optimized performance and better error handling"""
+    logger.info(f"Building optimized team data for {team_name}")
     
-    team_data = {
-        'name': team_name,
-        'lineup': [],
-        'fullRoster': {
-            'batters': roster['batters'],
-            'pitchers': roster['pitchers']
-        },
-        'starter': {},
-        'teamStats': {
-            '7': team_stats,
-            '10': team_stats,  # Will be loaded on-demand
-            '21': team_stats   # Will be loaded on-demand
-        },
-        'rollingTeamStats': {
-            '7': {'AVG': '.250', 'OBP': '.320', 'SLG': '.400', 'HR': '10', 'AVG_HITS': '4.2', 'AVG_K': '3.8'},
-            '10': {'AVG': '.248', 'OBP': '.318', 'SLG': '.395', 'HR': '12', 'AVG_HITS': '4.0', 'AVG_K': '4.1'},
-            '21': {'AVG': '.245', 'OBP': '.315', 'SLG': '.390', 'HR': '15', 'AVG_HITS': '3.8', 'AVG_K': '4.3'}
+    try:
+        team_data = {
+            'name': team_name,
+            'id': team_id,  # Add team ID for frontend
+            'lineup': [],
+            'fullRoster': {
+                'batters': roster['batters'],
+                'pitchers': roster['pitchers']
+            },
+            'starter': {},
+            'teamStats': {
+                '7': team_stats,
+                '10': team_stats,
+                '21': team_stats
+            },
+            'rollingTeamStats': {
+                '7': {'AVG': '.250', 'OBP': '.320', 'SLG': '.400', 'HR': '10', 'AVG_HITS': '4.2', 'AVG_K': '3.8'},
+                '10': {'AVG': '.248', 'OBP': '.318', 'SLG': '.395', 'HR': '12', 'AVG_HITS': '4.0', 'AVG_K': '4.1'},
+                '21': {'AVG': '.245', 'OBP': '.315', 'SLG': '.390', 'HR': '15', 'AVG_HITS': '3.8', 'AVG_K': '4.3'}
+            }
         }
-    }
-    
-    # Load only 7-day stats initially
-    for i, batter in enumerate(roster['batters']):
-        if i < 15:  # Limit to prevent timeout
-            logger.info(f"Getting 7-day stats for batter: {batter['name']}")
-            
+        
+        # Load 7-day stats in parallel for better performance
+        if roster['batters']:
+            team_data['fullRoster']['batters'] = load_player_stats_batch(roster['batters'], 'hitting', 7, max_workers=3)
+        
+        if roster['pitchers']:
+            team_data['fullRoster']['pitchers'] = load_player_stats_batch(roster['pitchers'], 'pitching', 7, max_workers=3)
+        
+        # Initialize other periods with empty stats (loaded on-demand)
+        for batter in team_data['fullRoster']['batters']:
+            if 'stats' not in batter:
+                batter['stats'] = {}
+            batter['stats'].update({
+                '10': MLBStatsAPI._get_default_stats('hitting'),
+                '21': MLBStatsAPI._get_default_stats('hitting')
+            })
+        
+        for pitcher in team_data['fullRoster']['pitchers']:
+            if 'stats' not in pitcher:
+                pitcher['stats'] = {}
+            pitcher['stats'].update({
+                '10': MLBStatsAPI._get_default_stats('pitching'),
+                '21': MLBStatsAPI._get_default_stats('pitching')
+            })
+        
+        # Set lineup and starter safely
+        team_data['lineup'] = team_data['fullRoster']['batters'][:9]
+        if team_data['fullRoster']['pitchers']:
+            team_data['starter'] = team_data['fullRoster']['pitchers'][0]
+        
+        # Calculate rolling team stats
+        for period in ['7']:  # Only calculate for loaded period initially
             try:
-                stats_7d = MLBStatsAPI.get_player_stats(batter['id'], 'hitting', 7)
-                # Only load 7-day stats, leave others empty for now
-                batter['stats'] = {
-                    '7': stats_7d,
-                    '10': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
-                    '21': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
-                }
-            except:
-                batter['stats'] = {
-                    '7': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
-                    '10': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
-                    '21': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
-                }
-        else:
-            batter['stats'] = {
-                '7': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
-                '10': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
-                '21': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
+                rolling_stats = calculate_rolling_team_stats(
+                    team_data['fullRoster']['batters'], 
+                    team_data['fullRoster']['pitchers'], 
+                    period
+                )
+                team_data['rollingTeamStats'][period] = rolling_stats
+            except Exception as e:
+                logger.error(f"Error calculating rolling stats for {period} days: {e}")
+        
+        logger.info(f"Team data built for {team_name} - 7-day stats loaded with {len(team_data['fullRoster']['batters'])} batters, {len(team_data['fullRoster']['pitchers'])} pitchers")
+        return team_data
+        
+    except Exception as e:
+        logger.error(f"Error building team data for {team_name}: {e}")
+        # Return minimal team data on error
+        return {
+            'name': team_name,
+            'id': team_id,
+            'lineup': [],
+            'fullRoster': {'batters': [], 'pitchers': []},
+            'starter': {},
+            'teamStats': {'7': team_stats, '10': team_stats, '21': team_stats},
+            'rollingTeamStats': {
+                '7': {'AVG': '.000', 'OBP': '.000', 'SLG': '.000', 'HR': '0', 'AVG_HITS': '0.0', 'AVG_K': '0.0'},
+                '10': {'AVG': '.000', 'OBP': '.000', 'SLG': '.000', 'HR': '0', 'AVG_HITS': '0.0', 'AVG_K': '0.0'},
+                '21': {'AVG': '.000', 'OBP': '.000', 'SLG': '.000', 'HR': '0', 'AVG_HITS': '0.0', 'AVG_K': '0.0'}
             }
-    
-    # Same for pitchers - only 7-day stats
-    for i, pitcher in enumerate(roster['pitchers']):
-        if i < 15:
-            logger.info(f"Getting 7-day stats for pitcher: {pitcher['name']}")
-            
-            try:
-                stats_7d = MLBStatsAPI.get_player_stats(pitcher['id'], 'pitching', 7)
-                pitcher['stats'] = {
-                    '7': stats_7d,
-                    '10': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
-                    '21': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
-                }
-            except:
-                pitcher['stats'] = {
-                    '7': {'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0', 'gs': 0, 'sv': 0},
-                    '10': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
-                    '21': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
-                }
-        else:
-            pitcher['stats'] = {
-                '7': {'era': '0.00', 'whip': '0.00', 'k': 0, 'bb': 0, 'ip': '0.0', 'gs': 0, 'sv': 0},
-                '10': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0},
-                '21': {'avg': '.000', 'obp': '.000', 'slg': '.000', 'hr': 0, 'rbi': 0, 'h': 0, 'ab': 0}
-            }
-    
-    team_data['lineup'] = roster['batters'][:9]
-    if roster['pitchers']:
-        team_data['starter'] = roster['pitchers'][0]
-    
-    logger.info(f"Team data built for {team_name} - 7-day stats loaded")
-    return team_data
+        }
 
-# Also update the port configuration at the bottom
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
-

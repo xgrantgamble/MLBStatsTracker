@@ -3,3 +3,4 @@ requests==2.31.0
 Flask-Caching==2.1.0
 gunicorn==21.2.0
 pytz==2023.3
+futures==3.4.0

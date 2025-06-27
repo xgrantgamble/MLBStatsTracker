@@ -103,6 +103,11 @@
         font-size: 1rem;
     }
     
+    .tab-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+    
     .tab-btn.active-tab {
         background: #667eea;
         color: white;
@@ -172,6 +177,7 @@
         border-bottom: 1px solid #dee2e6;
         font-size: 0.9rem;
         text-align: center;
+        transition: background-color 0.2s ease;
     }
     
     .stats-table tr:hover {
@@ -215,30 +221,40 @@
     .stat-good {
         background-color: #d4edda !important;
         color: #155724;
+        font-weight: bold;
     }
     
     .stat-bad {
         background-color: #f8d7da !important;
         color: #721c24;
+        font-weight: bold;
     }
     
-    @media (max-width: 768px) {
-        .team-comparison {
-            flex-direction: column;
-            gap: 20px;
-        }
-        
-        .roster-columns {
-            flex-direction: column;
-            gap: 30px;
-        }
-        
-        .team-column {
-            min-width: auto;
-        }
+    .loading-message {
+        text-align: center;
+        color: #666;
+        font-style: italic;
+        padding: 20px;
+    }
+    
+    /* Loading spinner */
+    .loading-spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #667eea;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-right: 8px;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
     }
 
-    /* Better Mobile Styles */
+    /* Mobile Styles */
     @media (max-width: 768px) {
         .team-view {
             padding: 10px !important;
@@ -363,17 +379,6 @@
             padding: 10px !important;
         }
         
-        /* Scrolling hint */
-        .stats-table::after {
-            content: "← Scroll for more stats →";
-            display: block;
-            text-align: center;
-            font-size: 0.6rem;
-            color: #666;
-            padding: 5px;
-            background: #f0f0f0;
-        }
-        
         /* Better conditional formatting visibility on mobile */
         .stat-good {
             background-color: #c3e6cb !important;
@@ -399,7 +404,6 @@
             padding: 4px 3px !important;
         }
     }
-
 </style>
 {% endblock %}
 
@@ -412,9 +416,9 @@
     
     <!-- Stats Period Controls -->
     <div class="stats-controls">
-        <button class="tab-btn active-tab" id="tab-7" onclick="setStatWindow('7')">7 Days</button>
-        <button class="tab-btn" id="tab-10" onclick="setStatWindow('10')">10 Days</button>
-        <button class="tab-btn" id="tab-21" onclick="setStatWindow('21')">21 Days</button>
+        <button class="tab-btn active-tab" id="tab-7" data-days="7">7 Days</button>
+        <button class="tab-btn" id="tab-10" data-days="10">10 Days</button>
+        <button class="tab-btn" id="tab-21" data-days="21">21 Days</button>
     </div>
     
     <!-- Team Comparison Section -->
@@ -740,16 +744,13 @@
                             <tr>
                                 <td class="player-name">{{ batter.name }}</td>
                                 <td><span class="position">{{ batter.position }}</span></td>
-                                {% set avg_val = batter.get('stats', {}).get('10', {}).get('avg', '.000')|float %}
-                                <td {% if avg_val > 0.265 %}class="stat-good"{% elif avg_val < 0.240 and avg_val > 0 %}class="stat-bad"{% endif %}>{{ "%.3f"|format(avg_val) }}</td>
-                                {% set slg_val = batter.get('stats', {}).get('10', {}).get('slg', '.000')|float %}
-                                <td {% if slg_val > 0.450 %}class="stat-good"{% endif %}>{{ "%.3f"|format(slg_val) }}</td>
-                                {% set obp_val = batter.get('stats', {}).get('10', {}).get('obp', '.000')|float %}
-                                <td {% if obp_val > 0.400 %}class="stat-good"{% endif %}>{{ "%.3f"|format(obp_val) }}</td>
-                                <td>{{ batter.get('stats', {}).get('10', {}).get('hr', '0') }}</td>
-                                <td>{{ batter.get('stats', {}).get('10', {}).get('rbi', '0') }}</td>
-                                <td>{{ batter.get('stats', {}).get('10', {}).get('h', '0') }}</td>
-                                <td>{{ batter.get('stats', {}).get('10', {}).get('ab', '0') }}</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
                             </tr>
                             {% endfor %}
                         {% else %}
@@ -781,16 +782,13 @@
                             <tr>
                                 <td class="player-name">{{ batter.name }}</td>
                                 <td><span class="position">{{ batter.position }}</span></td>
-                                {% set avg_val = batter.get('stats', {}).get('21', {}).get('avg', '.000')|float %}
-                                <td {% if avg_val > 0.265 %}class="stat-good"{% elif avg_val < 0.240 and avg_val > 0 %}class="stat-bad"{% endif %}>{{ "%.3f"|format(avg_val) }}</td>
-                                {% set slg_val = batter.get('stats', {}).get('21', {}).get('slg', '.000')|float %}
-                                <td {% if slg_val > 0.450 %}class="stat-good"{% endif %}>{{ "%.3f"|format(slg_val) }}</td>
-                                {% set obp_val = batter.get('stats', {}).get('21', {}).get('obp', '.000')|float %}
-                                <td {% if obp_val > 0.400 %}class="stat-good"{% endif %}>{{ "%.3f"|format(obp_val) }}</td>
-                                <td>{{ batter.get('stats', {}).get('21', {}).get('hr', '0') }}</td>
-                                <td>{{ batter.get('stats', {}).get('21', {}).get('rbi', '0') }}</td>
-                                <td>{{ batter.get('stats', {}).get('21', {}).get('h', '0') }}</td>
-                                <td>{{ batter.get('stats', {}).get('21', {}).get('ab', '0') }}</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
                             </tr>
                             {% endfor %}
                         {% else %}
@@ -861,15 +859,13 @@
                             {% for pitcher in away_team.fullRoster.pitchers[:15] %}
                             <tr>
                                 <td class="player-name">{{ pitcher.name }}</td>
-                                {% set era_val = pitcher.get('stats', {}).get('10', {}).get('era', '0.00')|float %}
-                                <td {% if era_val < 3.00 and era_val > 0 %}class="stat-good"{% elif era_val > 5.00 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('10', {}).get('era', '0.00') }}</td>
-                                {% set whip_val = pitcher.get('stats', {}).get('10', {}).get('whip', '0.00')|float %}
-                                <td {% if whip_val < 1.20 and whip_val > 0 %}class="stat-good"{% elif whip_val > 1.50 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('10', {}).get('whip', '0.00') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('k', '0') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('bb', '0') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('ip', '0.0') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('gs', '0') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('sv', '0') }}</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
                             </tr>
                             {% endfor %}
                         {% else %}
@@ -899,15 +895,13 @@
                             {% for pitcher in away_team.fullRoster.pitchers[:15] %}
                             <tr>
                                 <td class="player-name">{{ pitcher.name }}</td>
-                                {% set era_val = pitcher.get('stats', {}).get('21', {}).get('era', '0.00')|float %}
-                                <td {% if era_val < 3.00 and era_val > 0 %}class="stat-good"{% elif era_val > 5.00 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('21', {}).get('era', '0.00') }}</td>
-                                {% set whip_val = pitcher.get('stats', {}).get('21', {}).get('whip', '0.00')|float %}
-                                <td {% if whip_val < 1.20 and whip_val > 0 %}class="stat-good"{% elif whip_val > 1.50 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('21', {}).get('whip', '0.00') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('k', '0') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('bb', '0') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('ip', '0.0') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('gs', '0') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('sv', '0') }}</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
                             </tr>
                             {% endfor %}
                         {% else %}
@@ -985,16 +979,13 @@
                             <tr>
                                 <td class="player-name">{{ batter.name }}</td>
                                 <td><span class="position">{{ batter.position }}</span></td>
-                                {% set avg_val = batter.get('stats', {}).get('10', {}).get('avg', '.000')|float %}
-                                <td {% if avg_val > 0.265 %}class="stat-good"{% elif avg_val < 0.240 and avg_val > 0 %}class="stat-bad"{% endif %}>{{ "%.3f"|format(avg_val) }}</td>
-                                {% set slg_val = batter.get('stats', {}).get('10', {}).get('slg', '.000')|float %}
-                                <td {% if slg_val > 0.450 %}class="stat-good"{% endif %}>{{ "%.3f"|format(slg_val) }}</td>
-                                {% set obp_val = batter.get('stats', {}).get('10', {}).get('obp', '.000')|float %}
-                                <td {% if obp_val > 0.400 %}class="stat-good"{% endif %}>{{ "%.3f"|format(obp_val) }}</td>
-                                <td>{{ batter.get('stats', {}).get('10', {}).get('hr', '0') }}</td>
-                                <td>{{ batter.get('stats', {}).get('10', {}).get('rbi', '0') }}</td>
-                                <td>{{ batter.get('stats', {}).get('10', {}).get('h', '0') }}</td>
-                                <td>{{ batter.get('stats', {}).get('10', {}).get('ab', '0') }}</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
                             </tr>
                             {% endfor %}
                         {% else %}
@@ -1026,16 +1017,13 @@
                             <tr>
                                 <td class="player-name">{{ batter.name }}</td>
                                 <td><span class="position">{{ batter.position }}</span></td>
-                                {% set avg_val = batter.get('stats', {}).get('21', {}).get('avg', '.000')|float %}
-                                <td {% if avg_val > 0.265 %}class="stat-good"{% elif avg_val < 0.240 and avg_val > 0 %}class="stat-bad"{% endif %}>{{ "%.3f"|format(avg_val) }}</td>
-                                {% set slg_val = batter.get('stats', {}).get('21', {}).get('slg', '.000')|float %}
-                                <td {% if slg_val > 0.450 %}class="stat-good"{% endif %}>{{ "%.3f"|format(slg_val) }}</td>
-                                {% set obp_val = batter.get('stats', {}).get('21', {}).get('obp', '.000')|float %}
-                                <td {% if obp_val > 0.400 %}class="stat-good"{% endif %}>{{ "%.3f"|format(obp_val) }}</td>
-                                <td>{{ batter.get('stats', {}).get('21', {}).get('hr', '0') }}</td>
-                                <td>{{ batter.get('stats', {}).get('21', {}).get('rbi', '0') }}</td>
-                                <td>{{ batter.get('stats', {}).get('21', {}).get('h', '0') }}</td>
-                                <td>{{ batter.get('stats', {}).get('21', {}).get('ab', '0') }}</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
                             </tr>
                             {% endfor %}
                         {% else %}
@@ -1106,15 +1094,13 @@
                             {% for pitcher in home_team.fullRoster.pitchers[:15] %}
                             <tr>
                                 <td class="player-name">{{ pitcher.name }}</td>
-                                {% set era_val = pitcher.get('stats', {}).get('10', {}).get('era', '0.00')|float %}
-                                <td {% if era_val < 3.00 and era_val > 0 %}class="stat-good"{% elif era_val > 5.00 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('10', {}).get('era', '0.00') }}</td>
-                                {% set whip_val = pitcher.get('stats', {}).get('10', {}).get('whip', '0.00')|float %}
-                                <td {% if whip_val < 1.20 and whip_val > 0 %}class="stat-good"{% elif whip_val > 1.50 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('10', {}).get('whip', '0.00') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('k', '0') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('bb', '0') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('ip', '0.0') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('gs', '0') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('10', {}).get('sv', '0') }}</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
                             </tr>
                             {% endfor %}
                         {% else %}
@@ -1144,15 +1130,13 @@
                             {% for pitcher in home_team.fullRoster.pitchers[:15] %}
                             <tr>
                                 <td class="player-name">{{ pitcher.name }}</td>
-                                {% set era_val = pitcher.get('stats', {}).get('21', {}).get('era', '0.00')|float %}
-                                <td {% if era_val < 3.00 and era_val > 0 %}class="stat-good"{% elif era_val > 5.00 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('21', {}).get('era', '0.00') }}</td>
-                                {% set whip_val = pitcher.get('stats', {}).get('21', {}).get('whip', '0.00')|float %}
-                                <td {% if whip_val < 1.20 and whip_val > 0 %}class="stat-good"{% elif whip_val > 1.50 %}class="stat-bad"{% endif %}>{{ pitcher.get('stats', {}).get('21', {}).get('whip', '0.00') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('k', '0') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('bb', '0') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('ip', '0.0') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('gs', '0') }}</td>
-                                <td>{{ pitcher.get('stats', {}).get('21', {}).get('sv', '0') }}</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">Loading...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
+                                <td class="loading-message">...</td>
                             </tr>
                             {% endfor %}
                         {% else %}
@@ -1170,62 +1154,338 @@
 
 {% block extra_js %}
 <script>
+// Improved JavaScript with team IDs from backend
 let loadedPeriods = ['7']; // Track which periods are loaded
 const currentMatchup = {
-    homeId: {{ home_team.name.split()[-1] or 0 }},  // You'll need to pass team IDs
-    awayId: {{ away_team.name.split()[-1] or 0 }}
+    homeId: {{ home_team.get('id', 0) }},  // Get team ID safely
+    awayId: {{ away_team.get('id', 0) }}
 };
 
+// Loading state management
+let isLoading = false;
+
 async function setStatWindow(days) {
+    if (isLoading) return; // Prevent multiple simultaneous requests
+    
+    isLoading = true;
+    
     // Show loading indicator
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.disabled = true;
         if (btn.id === `tab-${days}`) {
-            btn.innerHTML = 'Loading...';
+            btn.innerHTML = '<span class="loading-spinner"></span>Loading...';
         }
     });
     
-    // If stats not loaded for this period, load them
-    if (!loadedPeriods.includes(days)) {
-        try {
-            const response = await fetch(`/api/load-stats/${currentMatchup.homeId}/${currentMatchup.awayId}/${days}`);
-            const data = await response.json();
-            
-            // Update tables with new data
-            updateTablesWithStats(data, days);
-            loadedPeriods.push(days);
-            
-        } catch (error) {
-            console.error('Failed to load stats:', error);
+    try {
+        // If stats not loaded for this period, load them
+        if (!loadedPeriods.includes(days)) {
+            await loadStatsForPeriod(days);
         }
-    }
-    
-    // Hide all windows, deactivate all tabs
-    ['7','10','21'].forEach(function(day){
-        document.querySelectorAll('.stat-'+day).forEach(function(el){
-            el.style.display = 'none';
+        
+        // Hide all windows, deactivate all tabs
+        ['7','10','21'].forEach(function(day){
+            document.querySelectorAll('.stat-'+day).forEach(function(el){
+                el.style.display = 'none';
+            });
+            const tabBtn = document.getElementById('tab-'+day);
+            if (tabBtn) {
+                tabBtn.classList.remove('active-tab');
+                tabBtn.disabled = false;
+                tabBtn.innerHTML = day + ' Days';
+            }
         });
-        document.getElementById('tab-'+day).classList.remove('active-tab');
-        document.getElementById('tab-'+day).disabled = false;
-        document.getElementById('tab-'+day).innerHTML = day + ' Days';
-    });
-    
-    // Show selected, activate tab
-    document.querySelectorAll('.stat-'+days).forEach(function(el){
-        el.style.display = '';
-    });
-    document.getElementById('tab-'+days).classList.add('active-tab');
+        
+        // Show selected, activate tab
+        document.querySelectorAll('.stat-'+days).forEach(function(el){
+            el.style.display = '';
+        });
+        const activeTab = document.getElementById('tab-'+days);
+        if (activeTab) {
+            activeTab.classList.add('active-tab');
+        }
+        
+    } catch (error) {
+        console.error('Failed to load stats:', error);
+        showErrorMessage('Failed to load stats. Please try again.');
+    } finally {
+        isLoading = false;
+        
+        // Restore button states
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.disabled = false;
+            if (!btn.classList.contains('active-tab')) {
+                const dayMatch = btn.id.match(/tab-(\d+)/);
+                if (dayMatch) {
+                    btn.innerHTML = dayMatch[1] + ' Days';
+                }
+            }
+        });
+    }
+}
+
+async function loadStatsForPeriod(days) {
+    try {
+        const response = await fetch(`/api/load-stats/${currentMatchup.homeId}/${currentMatchup.awayId}/${days}`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        // Update tables with new data
+        updateTablesWithStats(data, days);
+        loadedPeriods.push(days);
+        
+        console.log(`Successfully loaded ${days}-day stats`);
+        
+    } catch (error) {
+        console.error(`Error loading ${days}-day stats:`, error);
+        throw error;
+    }
 }
 
 function updateTablesWithStats(data, days) {
-    // Update table cells with new stats
-    // Implementation depends on your table structure
-    // You'd loop through data and update corresponding table cells
+    try {
+        // Update away team batters
+        updatePlayerTable(data.away_batters, days, 'away', 'batter');
+        
+        // Update home team batters  
+        updatePlayerTable(data.home_batters, days, 'home', 'batter');
+        
+        // Update away team pitchers
+        updatePlayerTable(data.away_pitchers, days, 'away', 'pitcher');
+        
+        // Update home team pitchers
+        updatePlayerTable(data.home_pitchers, days, 'home', 'pitcher');
+        
+        console.log(`Updated all tables for ${days}-day period`);
+        
+    } catch (error) {
+        console.error('Error updating tables:', error);
+    }
 }
 
-// Show loading message on page load
+function updatePlayerTable(players, days, team, playerType) {
+    try {
+        // Find the appropriate table
+        const tableSelector = `.stat-${days} table`;
+        const tables = document.querySelectorAll(tableSelector);
+        
+        if (!tables.length) {
+            console.warn(`No tables found for period ${days}`);
+            return;
+        }
+        
+        // Find the correct table based on team and player type
+        let targetTable = null;
+        
+        tables.forEach(table => {
+            const container = table.closest('.team-column');
+            if (!container) return;
+            
+            const header = container.querySelector('h4');
+            if (!header) return;
+            
+            const headerText = header.textContent.toLowerCase();
+            const teamName = team === 'away' ? '{{ away_team.name|lower }}' : '{{ home_team.name|lower }}';
+            const isCorrectTeam = headerText.includes(teamName.toLowerCase());
+            const isCorrectType = (playerType === 'batter' && headerText.includes('batters')) ||
+                                 (playerType === 'pitcher' && headerText.includes('pitchers'));
+            
+            if (isCorrectTeam && isCorrectType) {
+                targetTable = table;
+            }
+        });
+        
+        if (!targetTable) {
+            console.warn(`Target table not found for ${team} ${playerType}s, ${days} days`);
+            return;
+        }
+        
+        const tbody = targetTable.querySelector('tbody');
+        if (!tbody) return;
+        
+        // Update each row
+        players.forEach((player, index) => {
+            const row = tbody.children[index];
+            if (!row) return;
+            
+            const stats = player.stats[days];
+            if (!stats) return;
+            
+            // Update cells based on player type
+            if (playerType === 'batter') {
+                updateBatterRow(row, stats);
+            } else {
+                updatePitcherRow(row, stats);
+            }
+        });
+        
+    } catch (error) {
+        console.error(`Error updating ${team} ${playerType} table:`, error);
+    }
+}
+
+function updateBatterRow(row, stats) {
+    try {
+        const cells = row.children;
+        if (cells.length < 9) return;
+        
+        // Skip player name (0) and position (1)
+        // Update AVG (2), SLG (3), OBP (4), HR (5), RBI (6), H (7), AB (8)
+        
+        // AVG with conditional formatting
+        const avgVal = parseFloat(stats.avg || 0);
+        cells[2].textContent = stats.avg || '.000';
+        cells[2].className = '';
+        if (avgVal > 0.265) {
+            cells[2].classList.add('stat-good');
+        } else if (avgVal < 0.240 && avgVal > 0) {
+            cells[2].classList.add('stat-bad');
+        }
+        
+        // SLG
+        const slgVal = parseFloat(stats.slg || 0);
+        cells[3].textContent = stats.slg || '.000';
+        cells[3].className = '';
+        if (slgVal > 0.450) {
+            cells[3].classList.add('stat-good');
+        }
+        
+        // OBP
+        const obpVal = parseFloat(stats.obp || 0);
+        cells[4].textContent = stats.obp || '.000';
+        cells[4].className = '';
+        if (obpVal > 0.400) {
+            cells[4].classList.add('stat-good');
+        }
+        
+        // Other stats
+        cells[5].textContent = stats.hr || '0';
+        cells[6].textContent = stats.rbi || '0';
+        cells[7].textContent = stats.h || '0';
+        cells[8].textContent = stats.ab || '0';
+        
+    } catch (error) {
+        console.error('Error updating batter row:', error);
+    }
+}
+
+function updatePitcherRow(row, stats) {
+    try {
+        const cells = row.children;
+        if (cells.length < 8) return;
+        
+        // Skip player name (0)
+        // Update ERA (1), WHIP (2), K (3), BB (4), IP (5), GS (6), SV (7)
+        
+        // ERA with conditional formatting
+        const eraVal = parseFloat(stats.era || 0);
+        cells[1].textContent = stats.era || '0.00';
+        cells[1].className = '';
+        if (eraVal < 3.00 && eraVal > 0) {
+            cells[1].classList.add('stat-good');
+        } else if (eraVal > 5.00) {
+            cells[1].classList.add('stat-bad');
+        }
+        
+        // WHIP with conditional formatting
+        const whipVal = parseFloat(stats.whip || 0);
+        cells[2].textContent = stats.whip || '0.00';
+        cells[2].className = '';
+        if (whipVal < 1.20 && whipVal > 0) {
+            cells[2].classList.add('stat-good');
+        } else if (whipVal > 1.50) {
+            cells[2].classList.add('stat-bad');
+        }
+        
+        // Other stats
+        cells[3].textContent = stats.k || '0';
+        cells[4].textContent = stats.bb || '0';
+        cells[5].textContent = stats.ip || '0.0';
+        cells[6].textContent = stats.gs || '0';
+        cells[7].textContent = stats.sv || '0';
+        
+    } catch (error) {
+        console.error('Error updating pitcher row:', error);
+    }
+}
+
+function showErrorMessage(message) {
+    // Create or update error message
+    let errorDiv = document.getElementById('error-message');
+    if (!errorDiv) {
+        errorDiv = document.createElement('div');
+        errorDiv.id = 'error-message';
+        errorDiv.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #dc3545;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 1000;
+            max-width: 300px;
+            font-size: 14px;
+        `;
+        document.body.appendChild(errorDiv);
+    }
+    
+    errorDiv.textContent = message;
+    errorDiv.style.display = 'block';
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+        if (errorDiv && errorDiv.parentNode) {
+            errorDiv.style.display = 'none';
+        }
+    }, 5000);
+}
+
+// Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     console.log('MLB Stats Tracker loaded');
+    console.log('Current matchup:', currentMatchup);
+    
+    // Verify team IDs are available
+    if (!currentMatchup.homeId || !currentMatchup.awayId) {
+        console.warn('Team IDs not available - on-demand loading may not work');
+    }
+    
+    // Add click handlers to buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const dayMatch = this.id.match(/tab-(\d+)/);
+            if (dayMatch && !isLoading) {
+                setStatWindow(dayMatch[1]);
+            }
+        });
+    });
+});
+
+// Error handling for network issues
+window.addEventListener('online', function() {
+    console.log('Connection restored');
+});
+
+window.addEventListener('offline', function() {
+    console.log('Connection lost');
+    showErrorMessage('No internet connection. Some features may not work.');
 });
 </script>
 {% endblock %}
